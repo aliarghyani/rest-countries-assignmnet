@@ -12,8 +12,8 @@
     </v-row>
   </v-container>
   <v-container>
-    <v-row class="">
-      <v-col cols="12" md="6" class="">
+    <v-row>
+      <v-col cols="12" md="6">
         <v-skeleton-loader
           v-if="loadings.fetchCountryDetails"
           type="image"
@@ -33,13 +33,13 @@
           />
         </v-lazy>
       </v-col>
-      <v-col cols="12" md="6" class="d-flex ">
+      <v-col cols="12" md="6" class="d-flex">
         <v-skeleton-loader
           v-if="loadings.fetchCountryDetails"
           color="transparent"
           type="article,paragraph"
         ></v-skeleton-loader>
-        <v-lazy class="w-100" v-else :min-height="170" :options="{ threshold: 0.7 }" transition="fab-transition">
+        <v-lazy v-else class="w-100" :min-height="170" :options="{ threshold: 0.7 }" transition="fab-transition">
           <v-card color="transparent" flat max-width="570" class="detailsCard align-content-center">
             <v-card-title>{{ country?.name.common }}</v-card-title>
             <v-card-text>
@@ -51,19 +51,19 @@
                   </p>
                   <p>
                     <strong>Population:</strong>
-                    {{ country?.population.toLocaleString() }}
+                    {{ country?.population?.toLocaleString() ?? 'N/A' }}
                   </p>
                   <p>
                     <strong>Region:</strong>
-                    {{ country?.region }}
+                    {{ country?.region ?? 'N/A' }}
                   </p>
                   <p>
                     <strong>Sub Region:</strong>
-                    {{ country?.subregion }}
+                    {{ country?.subregion ?? 'N/A' }}
                   </p>
                   <p>
                     <strong>Capital:</strong>
-                    {{ country?.capital?.[0]||'N/A' }}
+                    {{ country?.capital?.[0] || 'N/A' }}
                   </p>
                 </v-col>
                 <v-col cols="12" md="6" class="d-flex flex-column">
@@ -94,7 +94,6 @@
                   @click="$router.push({ name: 'CountryDetails', params: { name: border } })"
                 ></v-btn>
               </div>
-              <!-- empty borders -->
               <div v-show="!borderCountriesList.length" class="text-center">No Borders</div>
             </v-card-text>
           </v-card>
@@ -105,35 +104,16 @@
 </template>
 
 <script setup lang="ts">
-import { useGlobal } from '@/store';
-import { ref, onMounted, computed, reactive } from 'vue';
-import apiService from '@/apiService';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 
-const globalStore = useGlobal(); // Access the global store
+import apiService from '@/apiService';
+import type { Country } from '@/interfaces/country';
+import { useGlobal } from '@/store';
+
+const globalStore = useGlobal();
 
 const route = useRoute();
-
-// Define types for the API response
-interface Country {
-  name: {
-    common: string;
-    official: string;
-    nativeName?: Record<string, { common: string; official: string }>;
-  };
-  flags: {
-    png: string;
-    alt: string;
-  };
-  capital: string[];
-  region: string;
-  subregion: string;
-  population: number;
-  tld: string;
-  languages: Record<string, string>;
-  currencies: Record<string, { name: string; symbol: string }>;
-  borders: string[];
-}
 const loadings = reactive<{ fetchCountryDetails?: boolean }>({});
 
 const country = ref<Country | null>(null);
@@ -186,10 +166,13 @@ const firstNativeName = computed(() => {
 });
 
 const borderCountriesList = computed(() => {
-  if (country.value?.borders) {
-    return country.value.borders.map(borderCode => borderCountries.value[borderCode]);
+  if (!country.value?.borders) {
+    return [];
   }
-  return [];
+
+  return country.value.borders
+    .map(borderCode => borderCountries.value[borderCode])
+    .filter((name): name is string => Boolean(name));
 });
 
 onMounted(() => {
@@ -199,7 +182,6 @@ onMounted(() => {
 
 <style scoped>
 .detailsCard {
-  /* align-content: center ; */
   p {
     margin-bottom: 10px;
   }
