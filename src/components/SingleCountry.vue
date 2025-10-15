@@ -11,7 +11,7 @@
 
     <v-img
       class="align-end text-white img-fluid flagImg border-b-thin"
-      :height="isLoaded?170:0"
+      :height="isLoaded ? 170 : 0"
       :src="country.flags.png"
       cover
       @load="isLoaded = true"
@@ -26,31 +26,31 @@
     <v-card-text>
       <span class="title">Region</span>
       :
-      <span>{{ country.region }}</span>
+      <span>{{ country.region ?? 'N/A' }}</span>
     </v-card-text>
     <v-card-text>
       <span class="title">Capital</span>
       :
-      <span>{{ country.capital[0] }}</span>
+      <span>{{ country.capital?.[0] ?? 'N/A' }}</span>
     </v-card-text>
   </v-card>
 </template>
 
 <script setup lang="ts">
-import { defineProps, ref } from 'vue';
+import { defineProps } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Country } from '@/interfaces/country';
 
 const router = useRouter();
 const isLoaded = defineModel<boolean | null>();
-const props = defineProps<{ country: Country }>();
+defineProps<{ country: Country }>();
 
 const goToCountry = (country: Country) => {
   router.push({ name: 'CountryDetails', params: { name: country.name.common } });
 };
 
-function formatNumbers(number: number): string {
-  return number.toLocaleString();
+function formatNumbers(value: number): string {
+  return value.toLocaleString();
 }
 </script>
 

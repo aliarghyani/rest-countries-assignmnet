@@ -1,7 +1,6 @@
 <template>
   <v-container class="fill-height">
-    <v-row no-gutters class="d-flex flex-row align-items-center justify-space-between ">
-      <!-- Search Input for Country Name -->
+    <v-row no-gutters class="d-flex flex-row align-items-center justify-space-between">
       <v-col cols="12" sm="4" md="4">
         <v-text-field
           v-model="searchQuery"
@@ -18,7 +17,6 @@
         />
       </v-col>
 
-      <!-- Filter by Region Dropdown -->
       <v-col cols="12" sm="4" md="3">
         <v-select
           v-model="selectedRegion"
@@ -34,7 +32,6 @@
         ></v-select>
       </v-col>
 
-      <!-- Sort by Option Dropdown -->
       <v-col cols="12" sm="3" md="3">
         <v-select
           v-model="selectedSortOption"
@@ -52,7 +49,6 @@
     </v-row>
   </v-container>
 
-  <!-- Country List Display -->
   <v-container class="fill-height">
     <v-row no-gutters>
       <v-col
@@ -65,7 +61,6 @@
         xl="2"
         class="mb-10 pa-2"
       >
-        <!-- Lazy load country component to improve performance -->
         <v-lazy :min-height="170" :options="{ threshold: 0.7 }" transition="fab-transition">
           <SingleCountry
             v-model:is-loaded="isLoaded[country.name.common]"
@@ -74,7 +69,6 @@
         </v-lazy>
       </v-col>
 
-      <!-- Display when no results are found -->
       <v-col
         v-if="filteredCountries?.length === 0 && !loadings.getCountries"
         class="justify-center d-flex"
@@ -102,7 +96,6 @@ interface SortOption {
 
 const globalStore = useGlobal();
 
-// Data references and initializations
 const countries = ref<Country[]>([]);
 const regions = ref<string[]>([]);
 const sortOptions = ref<SortOption[]>([
@@ -119,7 +112,6 @@ const isLoaded = ref<Record<string, boolean>>({});
 const router = useRouter();
 const route = useRoute();
 
-// Fuse.js options for fuzzy search
 const fuseOptions = {
   keys: ['name.common'],
   threshold: 0.4,
@@ -128,22 +120,17 @@ const fuseOptions = {
 };
 let fuse: Fuse<Country>;
 
-
-// Computed property for filtered and sorted countries
 const filteredCountries = computed(() => {
   if (!fuse) return countries.value;
 
-  // Apply fuzzy search on searchQuery
   const searchResults = searchQuery.value
     ? fuse.search(searchQuery.value).map(result => result.item)
     : countries.value;
 
-  // Filter by selected region
   let result = searchResults.filter(country => {
     return !selectedRegion.value || country.region === selectedRegion.value;
   });
 
-  // Sort by selected option
   if (selectedSortOption.value) {
     result.sort((a, b) => {
       if (selectedSortOption.value === 'population') {
@@ -157,15 +144,15 @@ const filteredCountries = computed(() => {
   return result;
 });
 
-// Fetch countries data and initialize Fuse.js
 const getCountries = async () => {
   loadings.getCountries = true;
   try {
     const response = await apiService.getCountries();
     countries.value = response.data;
-    regions.value = Array.from(new Set(countries.value.map(item => item.region))).filter(Boolean);
+    regions.value = Array.from(new Set(countries.value.map(item => item.region))).filter(
+      (value): value is string => typeof value === 'string' && value.length > 0
+    );
 
-    // Initialize Fuse.js with countries data
     fuse = new Fuse(countries.value, fuseOptions);
 
     countries.value.forEach(country => {
@@ -182,7 +169,6 @@ const getCountries = async () => {
   }
 };
 
-// Update URL query parameters when filters change
 const updateQueryParams = () => {
   router.replace({
     query: {
@@ -193,10 +179,8 @@ const updateQueryParams = () => {
   });
 };
 
-// Watch for changes in search, region, or sort options
 watch([selectedRegion, selectedSortOption, searchQuery], updateQueryParams);
 
-// Initial fetch on component mount and retrieve query parameters
 onMounted(() => {
   const { region, sort, search } = route.query;
   selectedRegion.value = (region as string) || null;
@@ -205,9 +189,3 @@ onMounted(() => {
   getCountries();
 });
 </script>
-
-<style scoped lang="scss">
-// .justify-content-between {
-//   justify-content: space-between;
-// }
-</style>
