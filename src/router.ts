@@ -2,92 +2,48 @@ import { useGlobal } from '@/store';
 import {
   createRouter,
   createWebHistory,
-  type Router,
-  type RouteRecordRaw
+  type LocationQuery,
+  type LocationQueryRaw,
+  type RouteLocationNormalized,
+  type RouteLocationNormalizedLoaded,
+  type RouteRecordRaw,
+  type Router
 } from 'vue-router';
 
 
-// Components
 import HomeView from '@/views/HomeView.vue';
 
-// Pinia Store
+type MetaFieldResolver<T> = T | ((route: RouteLocationNormalizedLoaded) => T);
 
-// Unimplemented in Vuetify 3.5.6
-// import { goTo } from 'vuetify/services';
-
-/** Router Rules */
-const routes: RouteRecordRaw[] = [
-  {
-    path: '/',
-    name: 'Home',
-    component: HomeView
-  },
-  {
-    path: '/:name',
-    name: 'CountryDetails',
-    component: async () => await import('@/views/CountryDetails.vue'),
-    props: route => ({ name: Array.isArray(route.params.name) ? route.params.name[0] : route.params.name }),
-    meta: {
-      requiresCountryParamValidation: true
-    }
-  },
-  {
-    path: '/not-found',
-    name: 'NotFound',
-    component: HomeView,
-    meta: {
-      preserveMessage: true,
-      isFallbackRoute: true
-    },
-    beforeEnter: () => {
-      const globalStore = useGlobal();
-      if (!globalStore.message) {
-        globalStore.setMessage('The page you were looking for could not be found.');
-      }
-      return true;
-    }
-  },
-  {
-    path: '/:pathMatch(.*)*',
-    redirect: { name: 'NotFound' },
-    meta: {
-      preserveMessage: true
-    }
+declare module 'vue-router' {
+  interface RouteMeta {
+    title?: MetaFieldResolver<string>;
+    breadcrumb?: MetaFieldResolver<string>;
+    preserveMessage?: boolean;
+    requiresCountryParamValidation?: boolean;
+    validateHomeQuery?: boolean;
+    isFallbackRoute?: boolean;
   }
-];
-
-/** Vue Router */
-const router: Router = createRouter({
-  /**
-   * History Mode
-   *
-   * @see {@link https://router.vuejs.org/guide/essentials/history-mode.html }
-   */
-  history: createWebHistory(import.meta.env.BASE_URL), // createWebHashHistory(import.meta.env.BASE_URL)
-  /*
-  scrollBehavior: (to, _from, savedPosition) => {
-    let scrollTo: number | string = 0;
-
-    if (to.hash) {
-      scrollTo = to.hash;
-    } else if (savedPosition) {
-      scrollTo = savedPosition.top;
-    }
-    return goTo(scrollTo);
-  },
-  */
-  routes
-});
+}
 
 const COUNTRY_NAME_PATTERN = /^[\p{L}\s.'-]{1,60}$/u;
 const INVALID_COUNTRY_PARAM_MESSAGE =
   'The country name provided in the address is invalid. Please choose a country from the list.';
+const VALID_HOME_SORT_OPTIONS: ReadonlySet<'population' | 'name'> = new Set(['population', 'name']);
+const DEFAULT_DOCUMENT_TITLE = 'REST Countries Explorer';
+
+const extractFirstString = (candidate: unknown): string | null => {
+  if (Array.isArray(candidate)) {
+    const [first] = candidate;
+    return typeof first === 'string' ? first : null;
+  }
+
+  return typeof candidate === 'string' ? candidate : null;
+};
 
 const extractCountryNameParam = (candidate: unknown): string | null => {
-  if (Array.isArray(candidate)) {
-    return typeof candidate[0] === 'string' ? candidate[0] : null;
-  }
-  return typeof candidate === 'string' ? candidate : null;
+  const value = extractFirstString(candidate);
+  return value ?? null;
 };
 
 const isCountryNameParamValid = (value: string | null): value is string => {
@@ -101,8 +57,129 @@ const isCountryNameParamValid = (value: string | null): value is string => {
 
 const normalizeCountryParam = (value: string): string => value.trim();
 
-// Global before guards
-// https://router.vuejs.org/guide/advanced/navigation-guards.html#global-before-guards}
+const normalizeSearchParam = (value: string | null): string | null => {
+  if (value === null) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const toQueryRecord = (query: LocationQuery | LocationQueryRaw, whitelist?: Set<string>): Record<string, string> => {
+  const entries = Object.entries(query).filter(([key]) => (whitelist ? whitelist.has(key) : true));
+  return entries.reduce<Record<string, string>>((acc, [key, rawValue]) => {
+    const value = extractFirstString(rawValue);
+    if (value !== null) {
+      acc[key] = value;
+    }
+    return acc;
+  }, {});
+};
+
+const haveSameQueryEntries = (left: Record<string, string>, right: Record<string, string>): boolean => {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every(key => right[key] === left[key]);
+};
+
+const sanitizeHomeRouteQuery = (to: RouteLocationNormalized): Record<string, string> => {
+  const sanitized: Record<string, string> = {};
+  const searchParam = normalizeSearchParam(extractFirstString(to.query.search));
+  if (searchParam !== null) {
+    sanitized.search = searchParam;
+  }
+
+  const regionParam = normalizeSearchParam(extractFirstString(to.query.region));
+  if (regionParam !== null) {
+    sanitized.region = regionParam;
+  }
+
+  const sortParam = normalizeSearchParam(extractFirstString(to.query.sort));
+  if (sortParam !== null && VALID_HOME_SORT_OPTIONS.has(sortParam as 'population' | 'name')) {
+    sanitized.sort = sortParam;
+  }
+
+  return sanitized;
+};
+
+const resolveMetaField = <T>(
+  value: MetaFieldResolver<T> | undefined,
+  route: RouteLocationNormalized | RouteLocationNormalizedLoaded
+): T | undefined => {
+  if (typeof value === 'function') {
+    return (value as (currentRoute: RouteLocationNormalizedLoaded) => T)(route as RouteLocationNormalizedLoaded);
+  }
+
+  return value;
+};
+
+const routes: RouteRecordRaw[] = [
+  {
+    path: '/',
+    name: 'Home',
+    component: HomeView,
+    meta: {
+      title: 'Explore Countries',
+      breadcrumb: 'Home',
+      validateHomeQuery: true
+    }
+  },
+  {
+    path: '/:name',
+    name: 'CountryDetails',
+    component: async () => await import('@/views/CountryDetails.vue'),
+    props: route => ({ name: Array.isArray(route.params.name) ? route.params.name[0] : route.params.name }),
+    meta: {
+      requiresCountryParamValidation: true,
+      breadcrumb: route => {
+        const countryParam = extractCountryNameParam(route.params.name);
+        return countryParam ?? 'Country Details';
+      },
+      title: route => {
+        const countryParam = extractCountryNameParam(route.params.name);
+        return countryParam ? `${countryParam} - Country Details` : 'Country Details';
+      }
+    }
+  },
+  {
+    path: '/not-found',
+    name: 'NotFound',
+    component: HomeView,
+    meta: {
+      preserveMessage: true,
+      isFallbackRoute: true,
+      breadcrumb: 'Not Found',
+      title: 'Page Not Found'
+    },
+    beforeEnter: () => {
+      const globalStore = useGlobal();
+      if (!globalStore.message) {
+        globalStore.setMessage('The page you were looking for could not be found.');
+      }
+      return true;
+    }
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: { name: 'NotFound' },
+    meta: {
+      preserveMessage: true,
+      breadcrumb: 'Not Found',
+      title: 'Page Not Found'
+    }
+  }
+];
+
+const router: Router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes
+});
+
 router.beforeEach(to => {
   const globalStore = useGlobal();
   globalStore.setLoading(true);
@@ -132,40 +209,32 @@ router.beforeEach(to => {
     }
   }
 
+  if (to.meta?.validateHomeQuery) {
+    const sanitizedQuery = sanitizeHomeRouteQuery(to);
+    const managedKeys = new Set(['search', 'region', 'sort']);
+    const currentQuery = toQueryRecord(to.query, managedKeys);
+    if (!haveSameQueryEntries(currentQuery, sanitizedQuery)) {
+      return {
+        name: to.name ?? 'Home',
+        params: to.params,
+        query: sanitizedQuery,
+        hash: to.hash
+      };
+    }
+  }
+
   return true;
 });
 
-// Global After Hooks
-// https://router.vuejs.org/guide/advanced/navigation-guards.html#global-after-hooks}
-router.afterEach(() => {
+router.afterEach(to => {
   const globalStore = useGlobal();
-  // Hide Loading
   globalStore.setLoading(false);
+
+  const resolvedTitle = resolveMetaField(to.meta?.title, to) ?? DEFAULT_DOCUMENT_TITLE;
+  if (typeof document !== 'undefined') {
+    document.title = resolvedTitle;
+  }
 });
 
-/*
-const scrollBehavior = async (
-  to: RouteLocationNormalized,
-  _from: RouteLocationNormalized,
-  savedPosition: RouteLocation
-): Promise<any> => {
-  let scrollpos = {};
-  if (to.hash) {
-    scrollpos = {
-      el: to.hash,
-      behavior: 'smooth',
-    };
-  } else if (savedPosition) {
-    scrollpos = savedPosition;
-  } else {
-    scrollpos = { top: 0 };
-  }
-  return await new Promise((resolve, _reject) => {
-    setTimeout(() => {
-      resolve(scrollpos);
-    }, 600);
-  });
-};
-*/
-
+export { extractCountryNameParam, resolveMetaField };
 export default router;

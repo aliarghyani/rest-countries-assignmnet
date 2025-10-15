@@ -1,4 +1,7 @@
 <template>
+  <v-container class="py-2 px-0 px-md-4">
+    <v-breadcrumbs :items="breadcrumbs" divider="mdi-chevron-right" />
+  </v-container>
   <v-container class="my-lg-5 my-md-3 my-2">
     <v-row justify="center">
       <v-col>
@@ -104,8 +107,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, reactive, ref, watch } from 'vue';
+import { useRoute, type RouteLocationRaw } from 'vue-router';
 
 import apiService from '@/apiService';
 import type { Country } from '@/interfaces/country';
@@ -119,16 +122,41 @@ const loadings = reactive<{ fetchCountryDetails?: boolean }>({});
 const country = ref<Country | null>(null);
 const borderCountries = ref<Record<string, string>>({});
 
-const fetchCountryDetails = async () => {
+interface BreadcrumbItem {
+  title: string;
+  disabled?: boolean;
+  to?: RouteLocationRaw;
+}
+
+const resolveRouteParam = (param: unknown): string | null => {
+  if (Array.isArray(param)) {
+    const [first] = param;
+    return typeof first === 'string' ? first : null;
+  }
+  return typeof param === 'string' ? param : null;
+};
+
+const fetchCountryDetails = async (rawName?: unknown) => {
+  const countryName = resolveRouteParam(rawName ?? route.params.name);
+
+  if (!countryName) {
+    country.value = null;
+    borderCountries.value = {};
+    return;
+  }
+
   loadings.fetchCountryDetails = true;
   try {
-    const response = await apiService.getCountryByName(route.params.name);
-    country.value = response.data[0];
-    if (country.value?.borders) {
+    const response = await apiService.getCountryByName(countryName);
+    country.value = Array.isArray(response.data) ? response.data[0] ?? null : null;
+    borderCountries.value = {};
+
+    if (country.value?.borders?.length) {
       const borderPromises = country.value.borders.map(async borderCode => {
         const borderResponse = await fetch(`https://restcountries.com/v3.1/alpha/${borderCode}`);
         const borderData = await borderResponse.json();
-        return { [borderCode]: borderData[0].name.common };
+        const borderName = Array.isArray(borderData) ? borderData[0]?.name?.common : undefined;
+        return { [borderCode]: borderName };
       });
       const borderResults = await Promise.all(borderPromises);
       borderCountries.value = Object.assign({}, ...borderResults);
@@ -143,6 +171,14 @@ const fetchCountryDetails = async () => {
     loadings.fetchCountryDetails = false;
   }
 };
+
+watch(
+  () => route.params.name,
+  newName => {
+    void fetchCountryDetails(newName);
+  },
+  { immediate: true }
+);
 
 const languageList = computed(() => {
   return Object.values(country.value?.languages || {})
@@ -175,8 +211,34 @@ const borderCountriesList = computed(() => {
     .filter((name): name is string => Boolean(name));
 });
 
-onMounted(() => {
-  fetchCountryDetails();
+const breadcrumbs = computed<BreadcrumbItem[]>(() => {
+  const items: BreadcrumbItem[] = [];
+
+  route.matched.forEach((record, index) => {
+    const isLast = index === route.matched.length - 1;
+    const resolver = record.meta?.breadcrumb;
+    let title: string | undefined;
+
+    if (typeof resolver === 'function') {
+      title = resolver(route);
+    } else if (typeof resolver === 'string') {
+      title = resolver;
+    } else if (typeof record.name === 'string') {
+      title = record.name;
+    }
+
+    if (!title) {
+      return;
+    }
+
+    items.push({
+      title,
+      disabled: isLast,
+      to: !isLast && typeof record.name === 'string' ? { name: record.name } : undefined
+    });
+  });
+
+  return items;
 });
 </script>
 
