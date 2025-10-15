@@ -1,8 +1,10 @@
 // apiService.ts
 
 import axios from 'axios';
-import type { AxiosResponse } from 'axios';
+
 import store from './store';
+
+import type { AxiosResponse } from 'axios';
 
 // Define interfaces for the expected API responses
 interface Country {
