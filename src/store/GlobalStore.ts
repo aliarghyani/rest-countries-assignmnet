@@ -7,6 +7,14 @@ interface CacheEntry<T = unknown> {
   expiresAt: number;
 }
 
+interface ReportedError {
+  message: string;
+  context?: string;
+  stack?: string;
+  severity: 'error' | 'warning' | 'info';
+  timestamp: number;
+}
+
 const CACHE_DEFAULT_TTL_MS = 1000 * 60 * 5; // 5 minutes
 const CACHE_MAX_ENTRIES = 50;
 export const CACHE_NAMESPACE = {
@@ -24,6 +32,7 @@ export const createCacheKey = (...segments: (string | number)[]): string =>
     .join('::');
 
 let networkStatusListenersAttached = false;
+let errorListenersAttached = false;
 
 /** Global Store */
 export default defineStore(
@@ -41,6 +50,8 @@ export default defineStore(
     const cacheEntries: Ref<Record<string, CacheEntry>> = ref({});
     const cacheOrder: Ref<string[]> = ref([]);
     const offline: Ref<boolean> = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false);
+    const errorLog: Ref<ReportedError[]> = ref([]);
+    const lastError: Ref<ReportedError | null> = ref(null);
 
     const removeCacheKey = (key: string): void => {
       if (cacheEntries.value[key]) {
@@ -117,10 +128,85 @@ export default defineStore(
       return offline.value;
     }
 
+    function normalizeError(
+      error: unknown,
+      context?: string,
+      severity: ReportedError['severity'] = 'error'
+    ): ReportedError {
+      let message = 'An unexpected error occurred.';
+      let stack: string | undefined;
+
+      if (error instanceof Error) {
+        message = error.message || message;
+        stack = error.stack;
+      } else if (typeof error === 'string') {
+        message = error;
+      } else if (typeof error === 'object' && error !== null) {
+        const maybeMessage = (error as { message?: string }).message;
+        if (typeof maybeMessage === 'string' && maybeMessage.trim().length > 0) {
+          message = maybeMessage;
+        }
+      }
+
+      return {
+        message,
+        context,
+        stack,
+        severity,
+        timestamp: now()
+      };
+    }
+
+    function trimErrorLog(): void {
+      const MAX_ENTRIES = 50;
+      if (errorLog.value.length > MAX_ENTRIES) {
+        errorLog.value = errorLog.value.slice(-MAX_ENTRIES);
+      }
+    }
+
+    function reportError(
+      error: unknown,
+      context?: string,
+      severity: ReportedError['severity'] = 'error'
+    ): ReportedError {
+      const entry = normalizeError(error, context, severity);
+      lastError.value = entry;
+      errorLog.value = [...errorLog.value, entry];
+      trimErrorLog();
+
+      if (severity === 'error' && !message.value) {
+        setMessage(entry.message);
+      }
+
+      if (typeof console !== 'undefined') {
+        const label = `[${entry.severity.toUpperCase()}]${context ? ` [${context}]` : ''}`;
+        console.error(label, error);
+      }
+
+      return entry;
+    }
+
+    function clearLastError(): void {
+      lastError.value = null;
+    }
+
+    function clearErrorLog(): void {
+      errorLog.value = [];
+    }
+
     if (!networkStatusListenersAttached && typeof window !== 'undefined') {
       window.addEventListener('online', () => setOffline(false));
       window.addEventListener('offline', () => setOffline(true));
       networkStatusListenersAttached = true;
+    }
+    if (!errorListenersAttached && typeof window !== 'undefined') {
+      window.addEventListener('error', event => {
+        reportError(event.error ?? event.message, 'global-error');
+      });
+      window.addEventListener('unhandledrejection', event => {
+        reportError(event.reason, 'unhandled-rejection');
+      });
+      errorListenersAttached = true;
     }
 
     function getCacheEntryMeta(key: string): CacheEntry | undefined {
@@ -214,11 +300,16 @@ export default defineStore(
       cacheEntries,
       cacheOrder,
       offline,
+      errorLog,
+      lastError,
       setLoading,
       setProgress,
       setMessage,
       setOffline,
       isOffline,
+      reportError,
+      clearLastError,
+      clearErrorLog,
       getCachedResponse,
       setCachedResponse,
       invalidateCache,
@@ -231,7 +322,7 @@ export default defineStore(
   },
   {
     persist: {
-      pick: ['cacheEntries', 'cacheOrder']
+      pick: ['cacheEntries', 'cacheOrder', 'offline', 'errorLog', 'lastError']
     }
   }
 );
