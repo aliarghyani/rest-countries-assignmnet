@@ -245,6 +245,36 @@ export default {
     return response;
   },
 
+  async searchCountries(query: string): Promise<AxiosResponse<Country[]>> {
+    const normalizedQuery = normalizeNameParameter(query).trim().toLowerCase();
+    if (!normalizedQuery) {
+      return buildCachedAxiosResponse([]);
+    }
+
+    const store = getGlobalStore();
+    const cacheKey = createCacheKey(CACHE_NAMESPACE.SEARCH, normalizedQuery);
+    const cached = store.getCachedResponse<Country[]>(cacheKey, undefined, DEFAULT_CACHE_TTL_MS);
+    if (cached) {
+      return buildCachedAxiosResponse(cached);
+    }
+
+    if (store.isOffline()) {
+      const offlineError = new Error('Offline mode: Unable to execute search.');
+      offlineError.name = 'OfflineError';
+      store.reportError(offlineError, 'searchCountries', 'warning');
+      throw offlineError;
+    }
+
+    const response = await performRequestWithRetry(
+      () => apiClient.get<Country[]>(`/name/${encodeURIComponent(normalizedQuery)}`),
+      { context: 'searchCountries', retries: 1, retryDelayMs: 250 }
+    );
+
+    const sanitized = Array.isArray(response.data) ? response.data : [];
+    store.setCachedResponse(cacheKey, sanitized, DEFAULT_CACHE_TTL_MS);
+    return buildCachedAxiosResponse(sanitized);
+  },
+
   async getBorderCountriesByCodes(codes: string[]): Promise<BorderCountriesAxiosResponse> {
     const store = getGlobalStore();
     const normalizedCodes = uniqueNormalizedCodes(codes);

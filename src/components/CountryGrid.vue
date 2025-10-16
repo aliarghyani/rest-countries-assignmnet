@@ -85,7 +85,7 @@
 
 <script setup lang="ts">
 import { useGlobal } from '@/store';
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import {
   useRoute,
   useRouter,
@@ -98,7 +98,7 @@ import Fuse from 'fuse.js';
 
 import type { Country } from '@/interfaces/country';
 
-import apiService, { COUNTRIES_CACHE_TTL_MS } from '@/apiService';
+import apiService, { COUNTRIES_CACHE_TTL_MS, DEFAULT_CACHE_TTL_MS } from '@/apiService';
 import SingleCountry from '@/components/SingleCountry.vue';
 import { CACHE_NAMESPACE, createCacheKey } from '@/store/GlobalStore';
 
@@ -112,6 +112,9 @@ interface BreadcrumbItem {
   disabled?: boolean;
   to?: RouteLocationRaw;
 }
+
+const DEBOUNCE_MS = 250;
+const SUGGESTION_LIMIT = 8;
 
 const globalStore = useGlobal();
 const countriesCacheKey = createCacheKey(CACHE_NAMESPACE.COUNTRIES, 'all');
@@ -128,6 +131,10 @@ const loadings = reactive<{ getCountries: boolean }>({ getCountries: false });
 const errorMessages = ref<string[]>([]);
 const selectedRegion = ref<string | null>(null);
 const searchQuery = ref<string | null>(null);
+const searchResults = ref<Country[]>([]);
+const isSearching = ref(false);
+const searchError = ref<string | null>(null);
+const activeSearchQuery = ref<string | null>(null);
 const isLoaded = ref<Record<string, boolean>>({});
 const router = useRouter();
 const route = useRoute();
@@ -136,12 +143,13 @@ const MANAGED_QUERY_KEYS = new Set(['region', 'sort', 'search']);
 const VALID_SORT_OPTIONS: ReadonlySet<'population' | 'name'> = new Set(['population', 'name']);
 
 const fuseOptions = {
-  keys: ['name.common'],
+  keys: ['name.common', 'capital', 'region'],
   threshold: 0.4,
   minMatchCharLength: 1,
   shouldSort: true
 };
 let fuse: Fuse<Country> | null = null;
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
 const sanitizeCountries = (data: unknown): Country[] => {
   if (!Array.isArray(data)) {
@@ -168,6 +176,12 @@ const applyCountriesState = (list: Country[]) => {
     loadedState[country.name.common] = isLoaded.value[country.name.common] ?? false;
   });
   isLoaded.value = loadedState;
+
+  if (!normalizeSearchValue(searchQuery.value)) {
+    globalStore.setSearchSuggestions(
+      list.slice(0, SUGGESTION_LIMIT).map(country => country.name.common)
+    );
+  }
 };
 
 const normalizeSearchValue = (value: string | null): string | null => {
@@ -187,9 +201,9 @@ const extractFirstString = (candidate: unknown): string | null => {
   return typeof candidate === 'string' ? candidate : null;
 };
 
-const toQueryRecord = (query: LocationQuery | LocationQueryRaw): Record<string, string> => {
+const toQueryRecord = (query: LocationQuery | LocationQueryRaw, whitelist?: Set<string>): Record<string, string> => {
   return Object.entries(query)
-    .filter(([key]) => MANAGED_QUERY_KEYS.has(key))
+    .filter(([key]) => (whitelist ? whitelist.has(key) : MANAGED_QUERY_KEYS.has(key)))
     .reduce<Record<string, string>>((acc, [key, rawValue]) => {
       const value = extractFirstString(rawValue);
       if (value !== null) {
@@ -217,6 +231,79 @@ const buildQueryFromState = (): LocationQueryRaw => {
     search: search ?? undefined
   };
 };
+
+const searchCacheKey = (query: string): string => createCacheKey(CACHE_NAMESPACE.SEARCH, query);
+
+async function performSearch(rawQuery: string | null): Promise<void> {
+  const query = normalizeSearchValue(rawQuery);
+  activeSearchQuery.value = query;
+  searchError.value = null;
+
+  if (!query) {
+    searchResults.value = [];
+    globalStore.setSearchSuggestions(
+      countries.value.slice(0, SUGGESTION_LIMIT).map(country => country.name.common)
+    );
+    return;
+  }
+
+  const cached = sanitizeCountries(
+    globalStore.getCachedResponse<Country[]>(searchCacheKey(query), undefined, DEFAULT_CACHE_TTL_MS)
+  );
+  if (cached.length) {
+    searchResults.value = cached;
+    globalStore.setSearchSuggestions(
+      cached.slice(0, SUGGESTION_LIMIT).map(country => country.name.common)
+    );
+    globalStore.recordSearchEvent(query, cached.length);
+    return;
+  }
+
+  if (globalStore.isOffline()) {
+    const fallback = fuse ? fuse.search(query).map(result => result.item) : [];
+    searchResults.value = fallback;
+    globalStore.setSearchSuggestions(
+      fallback.slice(0, SUGGESTION_LIMIT).map(country => country.name.common)
+    );
+    searchError.value = fallback.length
+      ? 'Offline mode: results limited to cached data.'
+      : 'Offline mode: no cached results for this search.';
+    globalStore.recordSearchEvent(query, fallback.length);
+    return;
+  }
+
+  isSearching.value = true;
+  try {
+    const response = await apiService.searchCountries(query);
+    const sanitized = sanitizeCountries(response.data);
+    searchResults.value = sanitized;
+    globalStore.setSearchSuggestions(
+      sanitized.slice(0, SUGGESTION_LIMIT).map(country => country.name.common)
+    );
+    globalStore.recordSearchEvent(query, sanitized.length);
+  } catch (error) {
+    searchResults.value = [];
+    const message =
+      (error as { message?: string })?.message ?? 'Unable to complete search right now.';
+    searchError.value = message;
+    globalStore.recordSearchEvent(query, 0);
+  } finally {
+    isSearching.value = false;
+  }
+}
+
+function scheduleSearch(rawQuery: string | null): void {
+  if (searchDebounce) {
+    clearTimeout(searchDebounce);
+  }
+  searchDebounce = setTimeout(() => {
+    void performSearch(rawQuery);
+  }, DEBOUNCE_MS);
+}
+
+function applySuggestion(suggestion: string): void {
+  searchQuery.value = suggestion;
+}
 
 let isSyncingRouteQuery = false;
 
@@ -247,10 +334,10 @@ watch(
   { immediate: true }
 );
 
-const updateRouteQueryFromState = () => {
+const updateRouteQueryFromState = (): void => {
   const nextQuery = buildQueryFromState();
-  const nextRecord = toQueryRecord(nextQuery);
-  const currentRecord = toQueryRecord(route.query);
+  const currentRecord = toQueryRecord(route.query, MANAGED_QUERY_KEYS);
+  const nextRecord = toQueryRecord(nextQuery, MANAGED_QUERY_KEYS);
 
   if (haveSameEntries(currentRecord, nextRecord)) {
     return;
@@ -265,25 +352,44 @@ const updateRouteQueryFromState = () => {
     });
 };
 
-watch([selectedRegion, selectedSortOption, searchQuery], () => {
+watch([selectedRegion, selectedSortOption], () => {
   if (isSyncingRouteQuery) {
     return;
   }
   updateRouteQueryFromState();
 });
 
-const filteredCountries = computed(() => {
-  if (!fuse) {
-    return countries.value;
+watch(
+  () => searchQuery.value,
+  newValue => {
+    if (isSyncingRouteQuery) {
+      return;
+    }
+    scheduleSearch(newValue);
+    updateRouteQueryFromState();
+  }
+);
+
+const baseDataset = computed(() => {
+  const query = normalizeSearchValue(activeSearchQuery.value);
+  if (query) {
+    if (searchResults.value.length) {
+      return searchResults.value;
+    }
+    if (fuse) {
+      return fuse.search(query).map(result => result.item);
+    }
   }
 
-  const searchResults = searchQuery.value
-    ? fuse.search(searchQuery.value).map(result => result.item)
-    : countries.value;
+  return countries.value;
+});
 
-  let result = searchResults.filter(country => {
-    return !selectedRegion.value || country.region === selectedRegion.value;
-  });
+const filteredCountries = computed(() => {
+  let result: Country[] = baseDataset.value;
+
+  if (selectedRegion.value) {
+    result = result.filter(country => country.region === selectedRegion.value);
+  }
 
   if (selectedSortOption.value) {
     result = [...result].sort((a, b) => {
@@ -304,6 +410,9 @@ const getCountries = async () => {
     const cachedCountries = sanitizeCountries(globalStore.getCachedResponse<Country[]>(countriesCacheKey));
     if (cachedCountries.length) {
       applyCountriesState(cachedCountries);
+      if (searchQuery.value) {
+        scheduleSearch(searchQuery.value);
+      }
     }
 
     const cacheIsFresh = globalStore.isCacheFresh(countriesCacheKey, COUNTRIES_CACHE_TTL_MS);
@@ -327,6 +436,9 @@ const getCountries = async () => {
     }
 
     applyCountriesState(sanitized);
+    if (searchQuery.value) {
+      scheduleSearch(searchQuery.value);
+    }
   } catch (error) {
     const errorMessage =
       (error as { response?: { message?: string }; message?: string })?.response?.message ||
@@ -374,10 +486,21 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => {
 watch(
   () => globalStore.isOffline(),
   offline => {
-    if (offline && !countries.value.length) {
-      const offlineMessage = 'Offline mode detected. Showing cached data when available.';
-      errorMessages.value = [offlineMessage];
-      globalStore.setMessage(offlineMessage);
+    if (offline) {
+      if (!countries.value.length) {
+        const offlineMessage = 'Offline mode detected. Showing cached data when available.';
+        errorMessages.value = [offlineMessage];
+        globalStore.setMessage(offlineMessage);
+      }
+      if (activeSearchQuery.value) {
+        void performSearch(activeSearchQuery.value);
+      }
+    } else {
+      errorMessages.value = [];
+      searchError.value = null;
+      if (activeSearchQuery.value) {
+        void performSearch(activeSearchQuery.value);
+      }
     }
   },
   { immediate: true }
@@ -386,5 +509,11 @@ watch(
 onMounted(() => {
   syncStateFromRoute();
   void getCountries();
+});
+
+onBeforeUnmount(() => {
+  if (searchDebounce) {
+    clearTimeout(searchDebounce);
+  }
 });
 </script>

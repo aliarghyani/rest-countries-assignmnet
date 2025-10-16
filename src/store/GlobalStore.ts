@@ -21,8 +21,12 @@ export const CACHE_NAMESPACE = {
   COUNTRIES: 'countries',
   COUNTRY_BY_NAME: 'country-by-name',
   COUNTRY_BY_CODE: 'country-by-code',
-  BORDER_COUNTRIES: 'border-countries'
+  BORDER_COUNTRIES: 'border-countries',
+  SEARCH: 'search'
 } as const;
+
+const MAX_SUGGESTIONS = 10;
+const MAX_ANALYTICS_ENTRIES = 100;
 
 const now = (): number => Date.now();
 export const createCacheKey = (...segments: (string | number)[]): string =>
@@ -52,6 +56,8 @@ export default defineStore(
     const offline: Ref<boolean> = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false);
     const errorLog: Ref<ReportedError[]> = ref([]);
     const lastError: Ref<ReportedError | null> = ref(null);
+    const searchSuggestions: Ref<string[]> = ref([]);
+    const searchAnalytics: Ref<Array<{ query: string; results: number; timestamp: number }>> = ref([]);
 
     const removeCacheKey = (key: string): void => {
       if (cacheEntries.value[key]) {
@@ -194,6 +200,37 @@ export default defineStore(
       errorLog.value = [];
     }
 
+    function setSearchSuggestions(suggestions: string[]): void {
+      const normalized = suggestions
+        .map(suggestion => suggestion.trim())
+        .filter(suggestion => suggestion.length > 0);
+
+      const unique: string[] = [];
+      normalized.forEach(value => {
+        if (!unique.includes(value)) {
+          unique.push(value);
+        }
+      });
+
+      searchSuggestions.value = unique.slice(0, MAX_SUGGESTIONS);
+    }
+
+    function clearSearchSuggestions(): void {
+      searchSuggestions.value = [];
+    }
+
+    function recordSearchEvent(query: string, results: number): void {
+      const normalizedQuery = query.trim();
+      if (!normalizedQuery) {
+        return;
+      }
+
+      searchAnalytics.value = [
+        ...searchAnalytics.value,
+        { query: normalizedQuery, results, timestamp: now() }
+      ].slice(-MAX_ANALYTICS_ENTRIES);
+    }
+
     if (!networkStatusListenersAttached && typeof window !== 'undefined') {
       window.addEventListener('online', () => setOffline(false));
       window.addEventListener('offline', () => setOffline(true));
@@ -302,6 +339,8 @@ export default defineStore(
       offline,
       errorLog,
       lastError,
+      searchSuggestions,
+      searchAnalytics,
       setLoading,
       setProgress,
       setMessage,
@@ -310,6 +349,9 @@ export default defineStore(
       reportError,
       clearLastError,
       clearErrorLog,
+      setSearchSuggestions,
+      clearSearchSuggestions,
+      recordSearchEvent,
       getCachedResponse,
       setCachedResponse,
       invalidateCache,
@@ -322,7 +364,7 @@ export default defineStore(
   },
   {
     persist: {
-      pick: ['cacheEntries', 'cacheOrder', 'offline', 'errorLog', 'lastError']
+      pick: ['cacheEntries', 'cacheOrder', 'offline', 'errorLog', 'lastError', 'searchSuggestions', 'searchAnalytics']
     }
   }
 );
