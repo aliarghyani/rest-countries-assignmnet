@@ -9,6 +9,12 @@ interface CacheEntry<T = unknown> {
 
 const CACHE_DEFAULT_TTL_MS = 1000 * 60 * 5; // 5 minutes
 const CACHE_MAX_ENTRIES = 50;
+export const CACHE_NAMESPACE = {
+  COUNTRIES: 'countries',
+  COUNTRY_BY_NAME: 'country-by-name',
+  COUNTRY_BY_CODE: 'country-by-code',
+  BORDER_COUNTRIES: 'border-countries'
+} as const;
 
 const now = (): number => Date.now();
 

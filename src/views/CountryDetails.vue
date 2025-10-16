@@ -85,19 +85,32 @@
                 </v-col>
               </v-row>
             </v-card-text>
-            <v-card-text class="d-flex">
-              <div class="bordersContainer">
+            <v-card-text class="d-flex flex-column">
+              <div class="bordersContainer d-flex flex-wrap align-center">
                 <strong class="nowrap pe-3">Border Countries:</strong>
-                <v-btn
-                  v-for="(border, index) in borderCountriesList"
-                  :key="index"
-                  size="x-small"
-                  class="p-2 mx-1 mb-1"
-                  :text="border"
-                  @click="$router.push({ name: 'CountryDetails', params: { name: border } })"
-                ></v-btn>
+                <template v-if="loadings.fetchBorderCountries">
+                  <v-progress-circular indeterminate size="20" class="ms-2" />
+                </template>
+                <template v-else>
+                  <v-btn
+                    v-for="(border, index) in borderCountriesList"
+                    :key="index"
+                    size="x-small"
+                    class="p-2 mx-1 mb-1"
+                    :text="border"
+                    @click="$router.push({ name: 'CountryDetails', params: { name: border } })"
+                  ></v-btn>
+                </template>
               </div>
-              <div v-show="!borderCountriesList.length" class="text-center">No Borders</div>
+              <div
+                v-if="!loadings.fetchBorderCountries && !borderCountriesList.length && !borderError"
+                class="text-center mt-2"
+              >
+                No Borders
+              </div>
+              <div v-if="borderError" class="text-error mt-2">
+                {{ borderError }}
+              </div>
             </v-card-text>
           </v-card>
         </v-lazy>
@@ -117,16 +130,23 @@ import { useGlobal } from '@/store';
 const globalStore = useGlobal();
 
 const route = useRoute();
-const loadings = reactive<{ fetchCountryDetails?: boolean }>({});
+const loadings = reactive<{ fetchCountryDetails: boolean; fetchBorderCountries: boolean }>({
+  fetchCountryDetails: false,
+  fetchBorderCountries: false
+});
 
 const country = ref<Country | null>(null);
 const borderCountries = ref<Record<string, string>>({});
+const borderError = ref<string | null>(null);
+const activeRequestId = ref(0);
 
 interface BreadcrumbItem {
   title: string;
   disabled?: boolean;
   to?: RouteLocationRaw;
 }
+
+const normalizeCode = (code: string): string => code.trim().toLowerCase();
 
 const resolveRouteParam = (param: unknown): string | null => {
   if (Array.isArray(param)) {
@@ -136,39 +156,95 @@ const resolveRouteParam = (param: unknown): string | null => {
   return typeof param === 'string' ? param : null;
 };
 
+const extractErrorMessage = (error: unknown, fallback: string): string =>
+  (error as { response?: { message?: string }; message?: string })?.response?.message ||
+  (error as { message?: string })?.message ||
+  fallback;
+
+const loadBorderCountries = async (borders: string[] | undefined, requestId: number): Promise<void> => {
+  if (requestId !== activeRequestId.value) {
+    return;
+  }
+
+  borderCountries.value = {};
+  borderError.value = null;
+
+  if (!borders?.length) {
+    loadings.fetchBorderCountries = false;
+    return;
+  }
+
+  loadings.fetchBorderCountries = true;
+  try {
+    const response = await apiService.getBorderCountriesByCodes(borders);
+    if (requestId !== activeRequestId.value) {
+      return;
+    }
+
+    const mapping: Record<string, string> = {};
+    response.data.forEach(borderCountry => {
+      const alpha3 = borderCountry.cca3 ?? borderCountry.cca2;
+      const name = borderCountry.name?.common;
+      if (!alpha3 || !name) {
+        return;
+      }
+      mapping[normalizeCode(alpha3)] = name;
+    });
+
+    borderCountries.value = mapping;
+
+    if (response.missingCodes.length) {
+      borderError.value = `Missing data for ${response.missingCodes.join(', ')}`;
+    }
+  } catch (error) {
+    if (requestId !== activeRequestId.value) {
+      return;
+    }
+    const errorMessage = extractErrorMessage(error, 'Unable to load border countries.');
+    borderError.value = errorMessage;
+    globalStore.setMessage(errorMessage);
+  } finally {
+    if (requestId === activeRequestId.value) {
+      loadings.fetchBorderCountries = false;
+    }
+  }
+};
+
 const fetchCountryDetails = async (rawName?: unknown) => {
+  const requestId = ++activeRequestId.value;
   const countryName = resolveRouteParam(rawName ?? route.params.name);
+
+  borderCountries.value = {};
+  borderError.value = null;
 
   if (!countryName) {
     country.value = null;
-    borderCountries.value = {};
+    loadings.fetchCountryDetails = false;
+    loadings.fetchBorderCountries = false;
     return;
   }
 
   loadings.fetchCountryDetails = true;
   try {
     const response = await apiService.getCountryByName(countryName);
-    country.value = Array.isArray(response.data) ? response.data[0] ?? null : null;
-    borderCountries.value = {};
-
-    if (country.value?.borders?.length) {
-      const borderPromises = country.value.borders.map(async borderCode => {
-        const borderResponse = await fetch(`https://restcountries.com/v3.1/alpha/${borderCode}`);
-        const borderData = await borderResponse.json();
-        const borderName = Array.isArray(borderData) ? borderData[0]?.name?.common : undefined;
-        return { [borderCode]: borderName };
-      });
-      const borderResults = await Promise.all(borderPromises);
-      borderCountries.value = Object.assign({}, ...borderResults);
+    if (requestId !== activeRequestId.value) {
+      return;
     }
+
+    country.value = Array.isArray(response.data) ? response.data[0] ?? null : null;
+    await loadBorderCountries(country.value?.borders ?? [], requestId);
   } catch (error) {
-    const errorMessage =
-      (error as { response?: { message?: string }; message?: string })?.response?.message ||
-      (error as { message?: string })?.message ||
-      'An error has occurred';
-    globalStore.message = errorMessage;
+    if (requestId !== activeRequestId.value) {
+      return;
+    }
+    const errorMessage = extractErrorMessage(error, 'An error has occurred');
+    borderCountries.value = {};
+    borderError.value = errorMessage;
+    globalStore.setMessage(errorMessage);
   } finally {
-    loadings.fetchCountryDetails = false;
+    if (requestId === activeRequestId.value) {
+      loadings.fetchCountryDetails = false;
+    }
   }
 };
 
@@ -207,7 +283,7 @@ const borderCountriesList = computed(() => {
   }
 
   return country.value.borders
-    .map(borderCode => borderCountries.value[borderCode])
+    .map(borderCode => borderCountries.value[normalizeCode(borderCode)])
     .filter((name): name is string => Boolean(name));
 });
 
