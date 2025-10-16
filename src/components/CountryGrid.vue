@@ -7,17 +7,25 @@
       <v-col cols="12" sm="4" md="4">
         <v-text-field
           v-model="searchQuery"
-          :items="countries"
           placeholder="Country Name"
           label="Search for a country"
           prepend-inner-icon="mdi-magnify"
-          item-props
-          :item-value="(country: Country) => country.name?.common || ''"
-          :item-title="(country: Country) => country.name?.common || ''"
-          menu-icon="mdi-chevron-down"
           variant="solo"
           :clearable="true"
+          :loading="isSearching"
+          :error-messages="searchError ? [searchError] : undefined"
         />
+        <div v-if="searchSuggestions.length" class="d-flex flex-wrap ga-2 mt-2">
+          <v-chip
+            v-for="suggestion in searchSuggestions"
+            :key="suggestion"
+            variant="outlined"
+            size="small"
+            @click="applySuggestion(suggestion)"
+          >
+            {{ suggestion }}
+          </v-chip>
+        </div>
       </v-col>
 
       <v-col cols="12" sm="4" md="3">
@@ -118,6 +126,7 @@ const SUGGESTION_LIMIT = 8;
 
 const globalStore = useGlobal();
 const countriesCacheKey = createCacheKey(CACHE_NAMESPACE.COUNTRIES, 'all');
+const searchSuggestions = computed(() => globalStore.searchSuggestions);
 
 const countries = ref<Country[]>([]);
 const regions = ref<string[]>([]);
@@ -517,3 +526,4 @@ onBeforeUnmount(() => {
   }
 });
 </script>
+

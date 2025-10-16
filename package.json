@@ -34,7 +34,10 @@
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build --force",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest"
   },
   "dependencies": {
     "@kyvg/vue3-notification": "^3.4.1",
@@ -90,6 +93,7 @@
     "vite-plugin-checker": "0.8.0",
     "vite-plugin-vue-devtools": "^7.5.2",
     "vite-plugin-vuetify": "^2.0.4",
+    "vitest": "^3.2.4",
     "vue-tsc": "^2.1.6"
   },
   "husky": {
