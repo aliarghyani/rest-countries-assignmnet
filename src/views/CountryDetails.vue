@@ -120,16 +120,21 @@
 </template>
 
 <script setup lang="ts">
+import { useGlobal } from '@/store';
 import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, type RouteLocationRaw } from 'vue-router';
 
-import apiService from '@/apiService';
 import type { Country } from '@/interfaces/country';
-import { useGlobal } from '@/store';
+
+import apiService, {
+  BORDER_COUNTRIES_CACHE_TTL_MS,
+  DEFAULT_CACHE_TTL_MS
+} from '@/apiService';
+import { CACHE_NAMESPACE, createCacheKey } from '@/store/GlobalStore';
 
 const globalStore = useGlobal();
-
 const route = useRoute();
+
 const loadings = reactive<{ fetchCountryDetails: boolean; fetchBorderCountries: boolean }>({
   fetchCountryDetails: false,
   fetchBorderCountries: false
@@ -148,6 +153,24 @@ interface BreadcrumbItem {
 
 const normalizeCode = (code: string): string => code.trim().toLowerCase();
 
+const sanitizeCountry = (data: unknown): Country | null => {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+  const candidate = data as Partial<Country>;
+  if (!candidate.name?.common || !candidate.flags?.png) {
+    return null;
+  }
+  return candidate as Country;
+};
+
+const sanitizeCountryList = (data: unknown): Country[] => {
+  if (!Array.isArray(data)) {
+    return [];
+  }
+  return data.map(sanitizeCountry).filter((item): item is Country => Boolean(item));
+};
+
 const resolveRouteParam = (param: unknown): string | null => {
   if (Array.isArray(param)) {
     const [first] = param;
@@ -160,6 +183,66 @@ const extractErrorMessage = (error: unknown, fallback: string): string =>
   (error as { response?: { message?: string }; message?: string })?.response?.message ||
   (error as { message?: string })?.message ||
   fallback;
+
+const findCountryInAggregateCache = (name: string): Country | null => {
+  const cachedList = sanitizeCountryList(globalStore.getCachedResponse<Country[]>(createCacheKey(CACHE_NAMESPACE.COUNTRIES, 'all')));
+  if (!cachedList.length) {
+    return null;
+  }
+  const lowerName = name.toLowerCase();
+  return cachedList.find(item => item.name?.common?.toLowerCase() === lowerName) ?? null;
+};
+
+const resolveCountryFromCache = (name: string): Country | null => {
+  const nameCacheKey = createCacheKey(CACHE_NAMESPACE.COUNTRY_BY_NAME, name.toLowerCase());
+  const cachedEntries = sanitizeCountryList(globalStore.getCachedResponse<Country[]>(nameCacheKey, undefined, DEFAULT_CACHE_TTL_MS));
+  if (cachedEntries.length) {
+    return cachedEntries[0] ?? null;
+  }
+
+  return findCountryInAggregateCache(name);
+};
+
+const buildBorderMappingFromCache = (codes: string[]): Record<string, string> => {
+  const mapping: Record<string, string> = {};
+  const normalizedCodes = codes.map(normalizeCode);
+
+  const aggregateKey = createCacheKey(CACHE_NAMESPACE.BORDER_COUNTRIES, normalizedCodes.join(','));
+  const aggregateRecord = globalStore.getCachedResponse<Record<string, Country>>(
+    aggregateKey,
+    undefined,
+    BORDER_COUNTRIES_CACHE_TTL_MS
+  );
+
+  if (aggregateRecord) {
+    normalizedCodes.forEach(code => {
+      const cachedCountry = aggregateRecord[code];
+      if (cachedCountry?.name?.common) {
+        mapping[code] = cachedCountry.name.common;
+      }
+    });
+  }
+
+  normalizedCodes.forEach(code => {
+    if (mapping[code]) {
+      return;
+    }
+    const perCode = globalStore.getCachedResponse<Country>(
+      createCacheKey(CACHE_NAMESPACE.COUNTRY_BY_CODE, code),
+      undefined,
+      DEFAULT_CACHE_TTL_MS
+    );
+    if (perCode?.name?.common) {
+      mapping[code] = perCode.name.common;
+    }
+  });
+
+  return mapping;
+};
+
+const applyBorderMapping = (mapping: Record<string, string>) => {
+  borderCountries.value = mapping;
+};
 
 const loadBorderCountries = async (borders: string[] | undefined, requestId: number): Promise<void> => {
   if (requestId !== activeRequestId.value) {
@@ -174,14 +257,39 @@ const loadBorderCountries = async (borders: string[] | undefined, requestId: num
     return;
   }
 
+  const normalizedCodes = borders.map(normalizeCode).filter(Boolean);
+  if (!normalizedCodes.length) {
+    loadings.fetchBorderCountries = false;
+    return;
+  }
+
+  const cachedMapping = buildBorderMappingFromCache(normalizedCodes);
+  const missingCodes = normalizedCodes.filter(code => !cachedMapping[code]);
+  const offline = globalStore.isOffline();
+
+  if (!missingCodes.length && Object.keys(cachedMapping).length) {
+    applyBorderMapping(cachedMapping);
+    loadings.fetchBorderCountries = false;
+    return;
+  }
+
+  if (offline) {
+    applyBorderMapping(cachedMapping);
+    if (missingCodes.length) {
+      borderError.value = `Offline mode: No cached data for ${missingCodes.map(code => code.toUpperCase()).join(', ')}`;
+    }
+    loadings.fetchBorderCountries = false;
+    return;
+  }
+
   loadings.fetchBorderCountries = true;
   try {
-    const response = await apiService.getBorderCountriesByCodes(borders);
+    const response = await apiService.getBorderCountriesByCodes(normalizedCodes);
     if (requestId !== activeRequestId.value) {
       return;
     }
 
-    const mapping: Record<string, string> = {};
+    const mapping = { ...cachedMapping };
     response.data.forEach(borderCountry => {
       const alpha3 = borderCountry.cca3 ?? borderCountry.cca2;
       const name = borderCountry.name?.common;
@@ -191,7 +299,7 @@ const loadBorderCountries = async (borders: string[] | undefined, requestId: num
       mapping[normalizeCode(alpha3)] = name;
     });
 
-    borderCountries.value = mapping;
+    applyBorderMapping(mapping);
 
     if (response.missingCodes.length) {
       borderError.value = `Missing data for ${response.missingCodes.join(', ')}`;
@@ -226,13 +334,40 @@ const fetchCountryDetails = async (rawName?: unknown) => {
 
   loadings.fetchCountryDetails = true;
   try {
+    const cachedCountry = resolveCountryFromCache(countryName);
+    const offline = globalStore.isOffline();
+
+    if (cachedCountry) {
+      country.value = cachedCountry;
+      await loadBorderCountries(cachedCountry.borders ?? [], requestId);
+      if (offline) {
+        return;
+      }
+
+      const cacheKey = createCacheKey(CACHE_NAMESPACE.COUNTRY_BY_NAME, countryName.toLowerCase());
+      if (globalStore.isCacheFresh(cacheKey, DEFAULT_CACHE_TTL_MS)) {
+        return;
+      }
+    } else if (offline) {
+      const offlineMessage = 'Offline mode: Country details are unavailable without cached data.';
+      borderError.value = offlineMessage;
+      globalStore.setMessage(offlineMessage);
+      return;
+    }
+
     const response = await apiService.getCountryByName(countryName);
     if (requestId !== activeRequestId.value) {
       return;
     }
 
-    country.value = Array.isArray(response.data) ? response.data[0] ?? null : null;
-    await loadBorderCountries(country.value?.borders ?? [], requestId);
+    const sanitized = sanitizeCountryList(response.data);
+    country.value = sanitized[0] ?? null;
+
+    if (!country.value) {
+      throw new Error('Country data is unavailable.');
+    }
+
+    await loadBorderCountries(country.value.borders ?? [], requestId);
   } catch (error) {
     if (requestId !== activeRequestId.value) {
       return;
@@ -254,6 +389,18 @@ watch(
     void fetchCountryDetails(newName);
   },
   { immediate: true }
+);
+
+watch(
+  () => globalStore.isOffline(),
+  offline => {
+    if (offline && country.value) {
+      const cachedBorderMapping = buildBorderMappingFromCache(country.value.borders ?? []);
+      if (Object.keys(cachedBorderMapping).length) {
+        applyBorderMapping(cachedBorderMapping);
+      }
+    }
+  }
 );
 
 const languageList = computed(() => {

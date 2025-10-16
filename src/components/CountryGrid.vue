@@ -98,8 +98,9 @@ import Fuse from 'fuse.js';
 
 import type { Country } from '@/interfaces/country';
 
-import apiService from '@/apiService';
+import apiService, { COUNTRIES_CACHE_TTL_MS } from '@/apiService';
 import SingleCountry from '@/components/SingleCountry.vue';
+import { CACHE_NAMESPACE, createCacheKey } from '@/store/GlobalStore';
 
 interface SortOption {
   title: string;
@@ -113,6 +114,7 @@ interface BreadcrumbItem {
 }
 
 const globalStore = useGlobal();
+const countriesCacheKey = createCacheKey(CACHE_NAMESPACE.COUNTRIES, 'all');
 
 const countries = ref<Country[]>([]);
 const regions = ref<string[]>([]);
@@ -122,7 +124,7 @@ const sortOptions = ref<SortOption[]>([
 ]);
 
 const selectedSortOption = ref<'population' | 'name' | null>(null);
-const loadings = reactive<{ getCountries?: boolean }>({ getCountries: false });
+const loadings = reactive<{ getCountries: boolean }>({ getCountries: false });
 const errorMessages = ref<string[]>([]);
 const selectedRegion = ref<string | null>(null);
 const searchQuery = ref<string | null>(null);
@@ -140,6 +142,33 @@ const fuseOptions = {
   shouldSort: true
 };
 let fuse: Fuse<Country> | null = null;
+
+const sanitizeCountries = (data: unknown): Country[] => {
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  return data.filter((item: unknown): item is Country => {
+    if (!item || typeof item !== 'object') {
+      return false;
+    }
+    const candidate = item as Partial<Country>;
+    return Boolean(candidate.name?.common && candidate.flags?.png);
+  });
+};
+
+const applyCountriesState = (list: Country[]) => {
+  countries.value = list;
+  regions.value = Array.from(new Set(list.map(item => item.region))).filter(
+    (value): value is string => typeof value === 'string' && value.length > 0
+  );
+  fuse = new Fuse(list, fuseOptions);
+  const loadedState: Record<string, boolean> = {};
+  list.forEach(country => {
+    loadedState[country.name.common] = isLoaded.value[country.name.common] ?? false;
+  });
+  isLoaded.value = loadedState;
+};
 
 const normalizeSearchValue = (value: string | null): string | null => {
   if (value === null) {
@@ -269,25 +298,44 @@ const filteredCountries = computed(() => {
 });
 
 const getCountries = async () => {
+  errorMessages.value = [];
   loadings.getCountries = true;
   try {
+    const cachedCountries = sanitizeCountries(globalStore.getCachedResponse<Country[]>(countriesCacheKey));
+    if (cachedCountries.length) {
+      applyCountriesState(cachedCountries);
+    }
+
+    const cacheIsFresh = globalStore.isCacheFresh(countriesCacheKey, COUNTRIES_CACHE_TTL_MS);
+    if (cacheIsFresh) {
+      return;
+    }
+
+    if (globalStore.isOffline()) {
+      if (!cachedCountries.length) {
+        const offlineMessage = 'Offline mode: Unable to load country list without cached data.';
+        errorMessages.value = [offlineMessage];
+        globalStore.setMessage(offlineMessage);
+      }
+      return;
+    }
+
     const response = await apiService.getCountries();
-    countries.value = response.data;
-    regions.value = Array.from(new Set(countries.value.map(item => item.region))).filter(
-      (value): value is string => typeof value === 'string' && value.length > 0
-    );
+    const sanitized = sanitizeCountries(response.data);
+    if (!sanitized.length) {
+      throw new Error('Country data is unavailable or malformed.');
+    }
 
-    fuse = new Fuse(countries.value, fuseOptions);
-
-    countries.value.forEach(country => {
-      isLoaded.value[country.name.common] = false;
-    });
+    applyCountriesState(sanitized);
   } catch (error) {
     const errorMessage =
       (error as { response?: { message?: string }; message?: string })?.response?.message ||
       (error as { message?: string })?.message ||
-      'An error has occurred';
-    globalStore.message = errorMessage;
+      'An error has occurred while loading countries.';
+    errorMessages.value = [errorMessage];
+    if (!countries.value.length) {
+      globalStore.setMessage(errorMessage);
+    }
   } finally {
     loadings.getCountries = false;
   }
@@ -322,6 +370,18 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => {
 
   return items;
 });
+
+watch(
+  () => globalStore.isOffline(),
+  offline => {
+    if (offline && !countries.value.length) {
+      const offlineMessage = 'Offline mode detected. Showing cached data when available.';
+      errorMessages.value = [offlineMessage];
+      globalStore.setMessage(offlineMessage);
+    }
+  },
+  { immediate: true }
+);
 
 onMounted(() => {
   syncStateFromRoute();

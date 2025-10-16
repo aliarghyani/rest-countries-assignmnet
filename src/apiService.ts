@@ -1,8 +1,10 @@
+import { useGlobal } from '@/store';
+
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios';
 
-import { useGlobal } from '@/store';
 import type { Country } from '@/interfaces/country';
-import { CACHE_NAMESPACE } from '@/store/GlobalStore';
+
+import { CACHE_NAMESPACE, createCacheKey } from '@/store/GlobalStore';
 
 interface CountryByCodeResponse {
   name: string;
@@ -31,17 +33,11 @@ apiClient.interceptors.response.use(
   }
 );
 
-const DEFAULT_CACHE_TTL_MS = 1000 * 60 * 5; // 5 minutes
-const COUNTRIES_CACHE_TTL_MS = 1000 * 60 * 10; // 10 minutes
-const BORDER_COUNTRIES_CACHE_TTL_MS = 1000 * 60 * 10; // 10 minutes
+export const DEFAULT_CACHE_TTL_MS = 1000 * 60 * 5; // 5 minutes
+export const COUNTRIES_CACHE_TTL_MS = 1000 * 60 * 10; // 10 minutes
+export const BORDER_COUNTRIES_CACHE_TTL_MS = 1000 * 60 * 10; // 10 minutes
 const BORDER_COUNTRIES_MAX_RETRIES = 2;
 const BORDER_COUNTRIES_RETRY_DELAY_MS = 300;
-
-const createCacheKey = (...segments: Array<string | number>): string =>
-  segments
-    .map(segment => segment.toString().trim().toLowerCase())
-    .filter(Boolean)
-    .join('::');
 
 const buildCachedAxiosResponse = <T>(data: T): AxiosResponse<T> => {
   const config: AxiosRequestConfig = { url: '', method: 'get', headers: {} };
@@ -65,7 +61,7 @@ const normalizeNameParameter = (name: string | string[]): string => {
 const normalizeCountryCode = (code: string): string => code.trim().toLowerCase();
 
 const uniqueNormalizedCodes = (codes: string[]): string[] => {
-  const seen = new Set<string>();
+  const seen: Set<string> = new Set();
   const unique: string[] = [];
 
   codes.forEach(code => {
@@ -157,7 +153,7 @@ export default {
 
     const aggregateKey = createCacheKey(CACHE_NAMESPACE.BORDER_COUNTRIES, normalizedCodes.join(','));
     const cachedAggregate = store.getCachedResponse<Record<string, Country>>(aggregateKey);
-    const resultsMap = new Map<string, Country>();
+    const resultsMap: Map<string, Country> = new Map();
 
     if (cachedAggregate) {
       normalizedCodes.forEach(code => {

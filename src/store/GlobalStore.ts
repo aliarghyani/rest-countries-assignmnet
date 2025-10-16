@@ -17,6 +17,13 @@ export const CACHE_NAMESPACE = {
 } as const;
 
 const now = (): number => Date.now();
+export const createCacheKey = (...segments: (string | number)[]): string =>
+  segments
+    .map(segment => segment.toString().trim().toLowerCase())
+    .filter(Boolean)
+    .join('::');
+
+let networkStatusListenersAttached = false;
 
 /** Global Store */
 export default defineStore(
@@ -33,6 +40,7 @@ export default defineStore(
 
     const cacheEntries: Ref<Record<string, CacheEntry>> = ref({});
     const cacheOrder: Ref<string[]> = ref([]);
+    const offline: Ref<boolean> = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false);
 
     const removeCacheKey = (key: string): void => {
       if (cacheEntries.value[key]) {
@@ -101,10 +109,48 @@ export default defineStore(
       message.value = msg;
     }
 
-    function getCachedResponse<T>(key: string, timestamp = now()): T | null {
+    function setOffline(value: boolean): void {
+      offline.value = value;
+    }
+
+    function isOffline(): boolean {
+      return offline.value;
+    }
+
+    if (!networkStatusListenersAttached && typeof window !== 'undefined') {
+      window.addEventListener('online', () => setOffline(false));
+      window.addEventListener('offline', () => setOffline(true));
+      networkStatusListenersAttached = true;
+    }
+
+    function getCacheEntryMeta(key: string): CacheEntry | undefined {
+      return cacheEntries.value[key];
+    }
+
+    function isCacheFresh(key: string, freshnessMs = CACHE_DEFAULT_TTL_MS, timestamp = now()): boolean {
       pruneExpiredEntries(timestamp);
       const entry = cacheEntries.value[key];
       if (!entry) {
+        return false;
+      }
+      return entry.createdAt + freshnessMs >= timestamp;
+    }
+
+    function getCacheAge(key: string, timestamp = now()): number | null {
+      const entry = cacheEntries.value[key];
+      if (!entry) {
+        return null;
+      }
+      return timestamp - entry.createdAt;
+    }
+
+    function getCachedResponse<T>(key: string, timestamp = now(), freshnessMs?: number): T | null {
+      pruneExpiredEntries(timestamp);
+      const entry = cacheEntries.value[key];
+      if (!entry) {
+        return null;
+      }
+      if (typeof freshnessMs === 'number' && entry.createdAt + freshnessMs < timestamp) {
         return null;
       }
       return entry.value as T;
@@ -150,10 +196,6 @@ export default defineStore(
       });
     }
 
-    function getCacheEntryMeta(key: string): CacheEntry | undefined {
-      return cacheEntries.value[key];
-    }
-
     function clearExpiredCache(): void {
       pruneExpiredEntries();
     }
@@ -171,13 +213,18 @@ export default defineStore(
       message,
       cacheEntries,
       cacheOrder,
+      offline,
       setLoading,
       setProgress,
       setMessage,
+      setOffline,
+      isOffline,
       getCachedResponse,
       setCachedResponse,
       invalidateCache,
       getCacheEntryMeta,
+      isCacheFresh,
+      getCacheAge,
       clearExpiredCache,
       cacheSize
     };
