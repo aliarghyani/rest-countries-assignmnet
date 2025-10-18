@@ -107,7 +107,7 @@ async function mountGrid() {
   });
 
   await flushPromises();
-  return { wrapper, store };
+  return { wrapper, store, router };
 }
 
 describe('CountryGrid', () => {
@@ -150,5 +150,14 @@ describe('CountryGrid', () => {
       suggestions[0].text()
     );
   });
-});
 
+  it('sorts by population when selected', async () => {
+    const { wrapper, router } = await mountGrid();
+    await router.push('/?sort=population');
+    await flushPromises();
+
+    const names = wrapper.findAll('.country-card').map(w => w.text());
+    // Expect descending by population: Canada (300), Germany (200), Poland (100)
+    expect(names).toEqual(['Canada', 'Germany', 'Poland']);
+  });
+});

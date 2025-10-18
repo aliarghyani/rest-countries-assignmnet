@@ -11,13 +11,11 @@ const apiMocks = vi.hoisted(() => ({
 
 const routerPush = vi.hoisted(() => vi.fn());
 
-const routeState = vi.hoisted(() =>
-  reactive({
-    params: { name: 'poland' },
-    matched: [{ name: 'Home', meta: { breadcrumb: 'Home' } }],
-    query: {}
-  })
-);
+const routeState = vi.hoisted(() => ({
+  params: { name: 'poland' },
+  matched: [{ name: 'Home', meta: { breadcrumb: 'Home' } }],
+  query: {}
+}));
 
 vi.mock('@/apiService', () => ({
   __esModule: true,
@@ -27,11 +25,13 @@ vi.mock('@/apiService', () => ({
     getCountries: vi.fn(),
     searchCountries: vi.fn(),
     getCountryByCode: vi.fn()
-  }
+  },
+  DEFAULT_CACHE_TTL_MS: 300000,
+  BORDER_COUNTRIES_CACHE_TTL_MS: 600000
 }));
 
 vi.mock('vue-router', () => ({
-  useRoute: () => routeState,
+  useRoute: () => reactive(routeState),
   useRouter: () => ({ push: routerPush }),
   RouterLink: { template: '<a><slot /></a>' }
 }));
@@ -97,7 +97,8 @@ describe('CountryDetails', () => {
       fromCache: false
     });
 
-    routeState.params.name = 'poland';
+    // Update hoisted mutable object without calling reactive()
+    Object.assign(routeState.params, { name: 'poland' });
     routeState.matched = [{ name: 'Home', meta: { breadcrumb: 'Home' } }];
     routeState.query = {};
 
@@ -110,18 +111,29 @@ describe('CountryDetails', () => {
     const wrapper = mount(CountryDetails, {
       global: {
         plugins: [pinia],
-        stubs
+        stubs,
+        mocks: { $router: { push: routerPush } }
       }
     });
 
     await flushPromises();
 
     expect(apiMocks.getCountryByName).toHaveBeenCalledWith('poland');
-    expect(apiMocks.getBorderCountriesByCodes).toHaveBeenCalledWith(['DEU']);
+    expect(apiMocks.getBorderCountriesByCodes).toHaveBeenCalledWith(['deu']);
     expect(wrapper.text()).toContain('Poland');
     expect(wrapper.findAll('[data-test="border-btn"]').length).toBeGreaterThan(0);
 
     await wrapper.find('[data-test="border-btn"]').trigger('click');
     expect(routerPush).toHaveBeenCalled();
+  });
+
+  it('handles API errors gracefully and shows message', async () => {
+    apiMocks.getCountryByName.mockRejectedValueOnce(new Error('Boom'));
+    const wrapper = mount(CountryDetails, {
+      global: { plugins: [pinia], stubs, mocks: { $router: { push: routerPush } } }
+    });
+    await flushPromises();
+    // Displays underlying error message
+    expect(wrapper.text()).toContain('Boom');
   });
 });

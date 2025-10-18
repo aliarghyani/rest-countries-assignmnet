@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 
 import SingleCountry from '@/components/SingleCountry.vue';
+import { expectNoA11yViolations } from '@/test-utils/a11y';
 
 const pushMock = vi.fn();
 
@@ -68,5 +69,16 @@ describe('SingleCountry', () => {
     await wrapper.find('.card').trigger('click');
 
     expect(pushMock).toHaveBeenCalledWith({ name: 'CountryDetails', params: { name: 'Poland' } });
+  });
+
+  it('has no critical accessibility violations', async () => {
+    const wrapper = mount(SingleCountry, {
+      props: {
+        country: sampleCountry,
+        modelValue: true
+      },
+      global: { stubs }
+    });
+    await expectNoA11yViolations(wrapper.element as HTMLElement);
   });
 });

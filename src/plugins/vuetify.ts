@@ -5,6 +5,7 @@ import * as components from 'vuetify/components';
 import * as directives from 'vuetify/directives';
 import * as labsComponents from 'vuetify/labs/components';
 import { en } from 'vuetify/locale';
+
 import { loadFonts } from '@/plugins/webfontloader';
 import 'vuetify/styles';
 import '@mdi/font/css/materialdesignicons.css';
