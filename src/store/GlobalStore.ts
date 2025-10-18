@@ -17,6 +17,14 @@ interface ReportedError {
 
 const CACHE_DEFAULT_TTL_MS = 1000 * 60 * 5; // 5 minutes
 const CACHE_MAX_ENTRIES = 50;
+// Per-namespace caps to avoid any single bucket growing unbounded
+const CACHE_NAMESPACE_LIMITS: Record<string, number> = {
+  countries: 5,
+  'country-by-name': 80,
+  'country-by-code': 80,
+  'border-countries': 50,
+  search: 30
+};
 export const CACHE_NAMESPACE = {
   COUNTRIES: 'countries',
   COUNTRY_BY_NAME: 'country-by-name',
@@ -57,7 +65,7 @@ export default defineStore(
     const errorLog: Ref<ReportedError[]> = ref([]);
     const lastError: Ref<ReportedError | null> = ref(null);
     const searchSuggestions: Ref<string[]> = ref([]);
-    const searchAnalytics: Ref<Array<{ query: string; results: number; timestamp: number }>> = ref([]);
+    const searchAnalytics: Ref<{ query: string; results: number; timestamp: number }[]> = ref([]);
 
     const removeCacheKey = (key: string): void => {
       if (cacheEntries.value[key]) {
@@ -85,10 +93,33 @@ export default defineStore(
     };
 
     const enforceCapacityLimit = (): void => {
+      // Global cap (LRU eviction)
       while (cacheOrder.value.length > CACHE_MAX_ENTRIES) {
         const oldestKey = cacheOrder.value[0];
         removeCacheKey(oldestKey);
       }
+
+      // Per-namespace caps
+      const counters: Record<string, number> = {};
+      for (const key of cacheOrder.value) {
+        const ns = key.split('::', 1)[0] ?? '';
+        counters[ns] = (counters[ns] ?? 0) + 1;
+      }
+
+      Object.entries(counters).forEach(([ns, count]) => {
+        const limit = CACHE_NAMESPACE_LIMITS[ns];
+        if (!limit || count <= limit) return;
+        // Evict oldest entries in this namespace until count <= limit
+        for (let i = 0; i < cacheOrder.value.length && counters[ns] > limit; i++) {
+          const key = cacheOrder.value[i];
+          if ((key.split('::', 1)[0] ?? '') === ns) {
+            removeCacheKey(key);
+            counters[ns] -= 1;
+            // step back since array shrank
+            i -= 1;
+          }
+        }
+      });
     };
 
     /**
@@ -319,6 +350,20 @@ export default defineStore(
       });
     }
 
+    function invalidateNamespace(namespace: string): void {
+      const ns = namespace.trim().toLowerCase();
+      invalidateCache(new RegExp(`^${ns}::`));
+    }
+
+    function invalidateOlderThan(maxAgeMs: number): void {
+      const threshold = now() - Math.max(0, maxAgeMs);
+      cacheOrder.value.slice().forEach(key => {
+        const entry = cacheEntries.value[key];
+        if (!entry) return;
+        if (entry.createdAt < threshold) removeCacheKey(key);
+      });
+    }
+
     function clearExpiredCache(): void {
       pruneExpiredEntries();
     }
@@ -355,6 +400,8 @@ export default defineStore(
       getCachedResponse,
       setCachedResponse,
       invalidateCache,
+      invalidateNamespace,
+      invalidateOlderThan,
       getCacheEntryMeta,
       isCacheFresh,
       getCacheAge,

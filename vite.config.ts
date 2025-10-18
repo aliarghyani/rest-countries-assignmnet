@@ -127,30 +127,12 @@ export default defineConfig(({ command, mode }): UserConfig => {
       // PWA: Service worker + offline cache
       VitePWA({
         registerType: 'autoUpdate',
+        strategies: 'injectManifest',
+        srcDir: 'src/plugins',
+        filename: 'sw.ts',
         includeAssets: ['favicon.ico', 'robots.txt', 'icons/*.png'],
-        workbox: {
-          navigateFallback: '/index.html',
-          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-          runtimeCaching: [
-            {
-              urlPattern: /https:\/\/restcountries\.com\/v3\.1\//,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'api-restcountries',
-                networkTimeoutSeconds: 3,
-                expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 },
-              },
-            },
-            {
-              urlPattern: ({ request }) => request.destination === 'image',
-              handler: 'StaleWhileRevalidate',
-              options: {
-                cacheName: 'images',
-                expiration: { maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 },
-              },
-            },
-          ],
-        },
+        injectRegister: 'auto',
+        devOptions: { enabled: false },
         manifest: {
           name: 'REST Countries Explorer',
           short_name: 'Countries',

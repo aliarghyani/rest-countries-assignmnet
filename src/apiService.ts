@@ -154,12 +154,31 @@ const fetchBorderCountriesBatch = async (codes: string[]): Promise<Country[]> =>
 
 const getGlobalStore = () => useGlobal();
 
+async function scheduleCountriesBackgroundSync(): Promise<void> {
+  try {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.ready;
+    // Try Background Sync first
+    const anyReg: any = reg as any;
+    if (anyReg?.sync?.register) {
+      await anyReg.sync.register('sync-countries');
+      return;
+    }
+    // Fallback to message-based sync
+    reg.active?.postMessage?.({ type: 'SYNC_COUNTRIES' });
+  } catch {
+    // ignore
+  }
+}
+
 export default {
   async getCountries(): Promise<AxiosResponse<Country[]>> {
     const store = getGlobalStore();
     const cacheKey = createCacheKey(CACHE_NAMESPACE.COUNTRIES, 'all');
     const cached = store.getCachedResponse<Country[]>(cacheKey);
     if (cached) {
+      // Trigger a background refresh if possible
+      void scheduleCountriesBackgroundSync();
       return buildCachedAxiosResponse(cached);
     }
 
@@ -185,6 +204,8 @@ export default {
     }
 
     store.setCachedResponse(cacheKey, response.data, COUNTRIES_CACHE_TTL_MS);
+    // Schedule maintenance refresh in background
+    void scheduleCountriesBackgroundSync();
     return response;
   },
 
