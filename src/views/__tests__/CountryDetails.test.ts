@@ -1,37 +1,44 @@
 /// <reference types="vitest" />
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { reactive } from 'vue';
 
-import CountryDetails from '@/views/CountryDetails.vue';
-import { useGlobal } from '@/store';
-
-const { getCountryByNameMock, getBorderCountriesByCodesMock } = vi.hoisted(() => ({
-  getCountryByNameMock: vi.fn(),
-  getBorderCountriesByCodesMock: vi.fn()
+const apiMocks = vi.hoisted(() => ({
+  getCountryByName: vi.fn(),
+  getBorderCountriesByCodes: vi.fn()
 }));
+
+const routerPush = vi.hoisted(() => vi.fn());
+
+const routeState = vi.hoisted(() =>
+  reactive({
+    params: { name: 'poland' },
+    matched: [{ name: 'Home', meta: { breadcrumb: 'Home' } }],
+    query: {}
+  })
+);
 
 vi.mock('@/apiService', () => ({
   __esModule: true,
   default: {
-    getCountryByName: getCountryByNameMock,
-    getBorderCountriesByCodes: getBorderCountriesByCodesMock,
+    getCountryByName: apiMocks.getCountryByName,
+    getBorderCountriesByCodes: apiMocks.getBorderCountriesByCodes,
     getCountries: vi.fn(),
     searchCountries: vi.fn(),
     getCountryByCode: vi.fn()
   }
 }));
 
-const { pushMock, routeStub } = vi.hoisted(() => ({
-  pushMock: vi.fn(),
-  routeStub: { params: { name: 'poland' } }
-}));
-
 vi.mock('vue-router', () => ({
-  useRoute: () => routeStub,
-  useRouter: () => ({ push: pushMock }),
+  useRoute: () => routeState,
+  useRouter: () => ({ push: routerPush }),
   RouterLink: { template: '<a><slot /></a>' }
 }));
+
+import CountryDetails from '@/views/CountryDetails.vue';
+
+import { useGlobal } from '@/store';
 
 const stubs = {
   'v-container': { template: '<div class="v-container"><slot /></div>' },
@@ -76,15 +83,24 @@ describe('CountryDetails', () => {
   let pinia: ReturnType<typeof createPinia>;
 
   beforeEach(() => {
-    getCountryByNameMock.mockResolvedValue({ data: [baseCountry] });
-    getBorderCountriesByCodesMock.mockResolvedValue({
+    pinia = createPinia();
+    setActivePinia(pinia);
+
+    apiMocks.getCountryByName.mockReset();
+    apiMocks.getBorderCountriesByCodes.mockReset();
+    routerPush.mockReset();
+
+    apiMocks.getCountryByName.mockResolvedValue({ data: [baseCountry] });
+    apiMocks.getBorderCountriesByCodes.mockResolvedValue({
       data: [borderCountry],
       missingCodes: [],
       fromCache: false
     });
-    pushMock.mockReset();
-    pinia = createPinia();
-    setActivePinia(pinia);
+
+    routeState.params.name = 'poland';
+    routeState.matched = [{ name: 'Home', meta: { breadcrumb: 'Home' } }];
+    routeState.query = {};
+
     const store = useGlobal();
     store.invalidateCache();
     store.setOffline(false);
@@ -100,14 +116,12 @@ describe('CountryDetails', () => {
 
     await flushPromises();
 
-    expect(getCountryByNameMock).toHaveBeenCalledWith('poland');
-    expect(getBorderCountriesByCodesMock).toHaveBeenCalledWith(['DEU']);
+    expect(apiMocks.getCountryByName).toHaveBeenCalledWith('poland');
+    expect(apiMocks.getBorderCountriesByCodes).toHaveBeenCalledWith(['DEU']);
     expect(wrapper.text()).toContain('Poland');
     expect(wrapper.findAll('[data-test="border-btn"]').length).toBeGreaterThan(0);
 
     await wrapper.find('[data-test="border-btn"]').trigger('click');
-    expect(pushMock).toHaveBeenCalled();
+    expect(routerPush).toHaveBeenCalled();
   });
 });
-
-

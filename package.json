@@ -37,7 +37,10 @@
     "prepare": "husky",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:unit": "vitest"
+    "test:unit": "vitest",
+    "storybook": "storybook dev -p 6006",
+    "storybook:build": "storybook build",
+    "storybook:test": "storybook test --watch"
   },
   "dependencies": {
     "@kyvg/vue3-notification": "^3.4.1",
@@ -55,6 +58,13 @@
   "devDependencies": {
     "@eslint/js": "^9.13.0",
     "@rushstack/eslint-patch": "^1.10.4",
+    "@storybook/addon-a11y": "^8.6.14",
+    "@storybook/addon-essentials": "^8.6.14",
+    "@storybook/addon-interactions": "^8.6.14",
+    "@storybook/test": "^8.6.14",
+    "@storybook/test-runner": "^0.23.0",
+    "@storybook/vue3": "8.6.14",
+    "@storybook/vue3-vite": "^8.6.14",
     "@tsconfig/node-lts": "^20.1.3",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^22.7.7",

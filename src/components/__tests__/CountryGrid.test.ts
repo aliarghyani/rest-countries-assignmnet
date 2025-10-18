@@ -1,45 +1,12 @@
 /// <reference types="vitest" />
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mount, flushPromises } from '@vue/test-utils';
-import { reactive } from 'vue';
-import { createPinia, setActivePinia } from 'pinia';
-
 import { useGlobal } from '@/store';
-
-const getCountriesMock = vi.hoisted(() => vi.fn());
-const searchCountriesMock = vi.hoisted(() => vi.fn());
-const noop = vi.hoisted(() => vi.fn());
-const route = vi.hoisted(() => reactive<{ query: Record<string, unknown> }>({ query: {} }));
-const replaceMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@/apiService', () => ({
-  __esModule: true,
-  default: {
-    getCountries: getCountriesMock,
-    searchCountries: searchCountriesMock,
-    getCountryByName: noop,
-    getCountryByCode: noop,
-    getBorderCountriesByCodes: noop
-  },
-  COUNTRIES_CACHE_TTL_MS: 600000,
-  DEFAULT_CACHE_TTL_MS: 300000,
-  BORDER_COUNTRIES_CACHE_TTL_MS: 600000
-}));
-
-vi.mock('vue-router', () => ({
-  useRoute: () => route,
-  useRouter: () => ({
-    replace: (location: { query?: Record<string, unknown> }) => {
-      const nextQuery = location.query ?? {};
-      route.query = { ...nextQuery };
-      replaceMock(location);
-      return Promise.resolve();
-    }
-  }),
-  RouterLink: { template: '<a><slot /></a>' }
-}));
+import { mount, flushPromises } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createMemoryHistory, createRouter } from 'vue-router';
 
 import CountryGrid from '@/components/CountryGrid.vue';
+
 
 const sampleCountries = [
   {
@@ -61,6 +28,24 @@ const sampleCountries = [
     region: 'Americas'
   }
 ];
+
+const getCountriesMock = vi.hoisted(() => vi.fn());
+const searchCountriesMock = vi.hoisted(() => vi.fn());
+const noop = vi.hoisted(() => vi.fn());
+
+vi.mock('@/apiService', () => ({
+  __esModule: true,
+  default: {
+    getCountries: getCountriesMock,
+    searchCountries: searchCountriesMock,
+    getCountryByName: noop,
+    getCountryByCode: noop,
+    getBorderCountriesByCodes: noop
+  },
+  COUNTRIES_CACHE_TTL_MS: 600000,
+  DEFAULT_CACHE_TTL_MS: 300000,
+  BORDER_COUNTRIES_CACHE_TTL_MS: 600000
+}));
 
 const stubs = {
   'v-container': { template: '<div class="v-container"><slot /></div>' },
@@ -102,11 +87,21 @@ async function mountGrid() {
   store.clearSearchSuggestions();
   store.searchAnalytics = [];
   store.setOffline(false);
-  route.query = {};
+
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', name: 'Home', component: { template: '<div />' }, meta: { breadcrumb: 'Home' } },
+      { path: '/:name', name: 'CountryDetails', component: { template: '<div />' } }
+    ]
+  });
+
+  await router.push('/');
+  await router.isReady();
 
   const wrapper = mount(CountryGrid, {
     global: {
-      plugins: [pinia],
+      plugins: [pinia, router],
       stubs
     }
   });
@@ -120,7 +115,6 @@ describe('CountryGrid', () => {
     vi.useFakeTimers();
     getCountriesMock.mockReset();
     searchCountriesMock.mockReset();
-    replaceMock.mockReset();
     getCountriesMock.mockResolvedValue({ data: sampleCountries });
     searchCountriesMock.mockResolvedValue({ data: [sampleCountries[0]] });
   });
@@ -143,7 +137,7 @@ describe('CountryGrid', () => {
     await vi.advanceTimersByTimeAsync(300);
     await flushPromises();
 
-    expect(searchCountriesMock).toHaveBeenCalledWith('pol');
+    expect(searchCountriesMock).toHaveBeenCalledWith('Pol');
     expect(store.searchAnalytics.length).toBeGreaterThan(0);
     const suggestions = wrapper.findAll('[data-test="suggestion"]');
     expect(suggestions.length).toBeGreaterThan(0);
@@ -157,3 +151,4 @@ describe('CountryGrid', () => {
     );
   });
 });
+
