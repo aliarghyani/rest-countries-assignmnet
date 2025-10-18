@@ -1,8 +1,9 @@
 name: E2E
 
 on:
+  # Run E2E only for PRs targeting main (and manual runs)
   pull_request:
-    branches: ["**"]
+    branches: ["main"]
   workflow_dispatch: {}
 
 jobs:
@@ -16,8 +17,7 @@ jobs:
 
       - name: Setup PNPM
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        # Use version from package.json `packageManager`
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -49,4 +49,3 @@ jobs:
         with:
           name: test-results
           path: test-results/
-

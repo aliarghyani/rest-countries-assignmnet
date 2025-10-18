@@ -1,8 +1,7 @@
 name: Storybook
 
 on:
-  push:
-    branches: ["main"]
+  # Vercel is used for deployment; keep this manual to avoid dual hosting
   workflow_dispatch: {}
 
 permissions:
@@ -23,8 +22,7 @@ jobs:
 
       - name: Setup PNPM
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        # Use version from package.json `packageManager`
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -53,4 +51,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-

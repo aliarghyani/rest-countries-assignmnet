@@ -1,8 +1,7 @@
 name: Deploy App
 
 on:
-  push:
-    branches: ["main"]
+  # Vercel handles production deployments; keep this manual only
   workflow_dispatch: {}
 
 permissions:
@@ -41,4 +40,3 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
-

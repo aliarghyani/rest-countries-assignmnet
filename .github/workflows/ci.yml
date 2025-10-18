@@ -17,8 +17,7 @@ jobs:
 
       - name: Setup PNPM
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        # Use version from package.json `packageManager`
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -53,4 +52,3 @@ jobs:
 
       - name: Lighthouse CI (performance assertions)
         run: npx -y @lhci/cli@0.12.x autorun --collect.staticDistDir=dist --upload.target=temporary-public-storage
-

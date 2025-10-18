@@ -117,8 +117,9 @@ Create a `.env` or `.env.production` as needed:
 
 ## Deployment Automation
 
-- GitHub Pages (App): `.github/workflows/deploy-app.yml` builds the app and deploys `dist/` on pushes to `main`.
-- GitHub Pages (Storybook): `.github/workflows/storybook.yml` deploys Storybook.
+- Vercel: Project configured via `vercel.json` (build `pnpm build`, output `dist`, SPA rewrites). Recommended for production.
+- GitHub Pages (App): workflow exists but is now manual-only; Vercel handles prod deploys.
+- GitHub Pages (Storybook): workflow is manual-only to avoid duplicate hosting.
 
 ## Important Env Vars
 
