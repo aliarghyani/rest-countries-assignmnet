@@ -1,9 +1,14 @@
 
 // Performance monitoring (opt-in via VITE_ENABLE_PERF_METRICS)
 import { initPerformanceMonitoring } from '@/perf/metrics';
+import { registerPWA } from '@/pwa';
 
 if (import.meta.env.VITE_ENABLE_PERF_METRICS === 'true') {
   initPerformanceMonitoring();
+}
+
+if (import.meta.env.PROD) {
+  registerPWA();
 }
 
 // Load vue core

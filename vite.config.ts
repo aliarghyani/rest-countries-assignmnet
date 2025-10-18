@@ -4,6 +4,7 @@ import { fileURLToPath, URL } from 'node:url';
 
 import vue from '@vitejs/plugin-vue';
 import { defineConfig, type Plugin, type UserConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 import { visualizer } from 'rollup-plugin-visualizer';
 import { checker } from 'vite-plugin-checker';
@@ -123,6 +124,46 @@ export default defineConfig(({ command, mode }): UserConfig => {
         // eslint: { lintCommand: 'eslint' },
         // stylelint: { lintCommand: 'stylelint' },
       }),
+      // PWA: Service worker + offline cache
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['favicon.ico', 'robots.txt', 'icons/*.png'],
+        workbox: {
+          navigateFallback: '/index.html',
+          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+          runtimeCaching: [
+            {
+              urlPattern: /https:\/\/restcountries\.com\/v3\.1\//,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'api-restcountries',
+                networkTimeoutSeconds: 3,
+                expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 },
+              },
+            },
+            {
+              urlPattern: ({ request }) => request.destination === 'image',
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'images',
+                expiration: { maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 },
+              },
+            },
+          ],
+        },
+        manifest: {
+          name: 'REST Countries Explorer',
+          short_name: 'Countries',
+          start_url: '/',
+          display: 'standalone',
+          theme_color: '#1976D2',
+          background_color: '#ffffff',
+          icons: [
+            { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+            { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+          ]
+        }
+      }),
       spaHistoryFallbackPlugin(),
     ],
     // https://vitejs.dev/config/server-options.html
@@ -157,6 +198,16 @@ export default defineConfig(({ command, mode }): UserConfig => {
       // Rollup Options
       // https://vitejs.dev/config/build-options.html#build-rollupoptions
       rollupOptions: {
+        plugins: (
+          (mode === 'analyze'
+            ? [
+                visualizer({
+                  open: true,
+                  filename: 'dist/stats.html'
+                }) as unknown as any
+              ]
+            : []) as any
+        ),
         output: {
           manualChunks: {
             // Split external library from transpiled code.
@@ -169,23 +220,15 @@ export default defineConfig(({ command, mode }): UserConfig => {
               'webfontloader',
             ],
             materialdesignicons: ['@mdi/font/css/materialdesignicons.css'],
+            vendor_utils: ['axios', 'fuse.js']
           },
-          plugins: [
-            mode === 'analyze'
-              ? // rollup-plugin-visualizer
-                // https://github.com/btd/rollup-plugin-visualizer
-                visualizer({
-                  open: true,
-                  filename: 'dist/stats.html',
-                })
-              : undefined,
-          ],
+          // no output.plugins (visualizer is set in rollupOptions.plugins)
         },
       },
     },
     esbuild: {
       // Drop console when production build.
-      drop: command === 'serve' ? [] : ['console'],
+      drop: command === 'serve' ? [] : ['console', 'debugger'],
     },
   };
 

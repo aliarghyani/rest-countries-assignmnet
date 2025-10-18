@@ -65,6 +65,10 @@ const stubs = {
   'v-progress-circular': { template: '<span class="progress" />' },
   'v-skeleton-loader': { template: '<div class="skeleton"><slot /></div>' },
   'v-lazy': { template: '<div><slot /></div>' },
+  'v-virtual-scroll': {
+    props: ['items'],
+    template: '<div class="v-virtual-scroll"><div v-for="item in items"><slot :item="item" /></div></div>'
+  },
   'v-chip': {
     emits: ['click'],
     template: '<button data-test="suggestion" type="button" @click="$emit(\'click\')"><slot /></button>'

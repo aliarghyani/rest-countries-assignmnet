@@ -81,13 +81,11 @@ let vuetifyConfig: VuetifyOptions = {
   }
 };
 
-if (import.meta.env.DEV) {
-  vuetifyConfig = {
-    components: { components, labsComponents },
-    directives,
-    ...vuetifyConfig
-  };
-}
+vuetifyConfig = {
+  components: { components, labsComponents },
+  directives,
+  ...vuetifyConfig
+};
 
 export default createVuetify(vuetifyConfig);
 export { components, directives };

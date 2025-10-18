@@ -61,33 +61,53 @@
   </v-container>
 
   <v-container class="fill-height">
-    <v-row no-gutters>
-      <v-col
-        v-for="country in filteredCountries"
-        :key="country.name.common"
-        cols="12"
-        md="4"
-        lg="3"
-        sm="6"
-        xl="2"
-        class="mb-10 pa-2"
-      >
-        <v-lazy :min-height="170" :options="{ threshold: 0.7 }" transition="fab-transition">
-          <SingleCountry
-            v-model:is-loaded="isLoaded[country.name.common]"
-            :country="country"
-          ></SingleCountry>
-        </v-lazy>
-      </v-col>
+    <template v-if="!useVirtualScroll">
+      <v-row no-gutters>
+        <v-col
+          v-for="country in filteredCountries"
+          :key="country.name.common"
+          cols="12"
+          md="4"
+          lg="3"
+          sm="6"
+          xl="2"
+          class="mb-10 pa-2"
+        >
+          <v-lazy :min-height="170" :options="{ threshold: 0.7 }" transition="fab-transition">
+            <SingleCountry
+              v-model:is-loaded="isLoaded[country.name.common]"
+              :country="country"
+            ></SingleCountry>
+          </v-lazy>
+        </v-col>
 
-      <v-col
+        <v-col
+          v-if="filteredCountries?.length === 0 && !loadings.getCountries"
+          class="justify-center d-flex"
+          cols="12"
+        >
+          <strong class="text-center mt-5 fw-bold">No results found for your search criteria.</strong>
+        </v-col>
+      </v-row>
+    </template>
+    <template v-else>
+      <v-virtual-scroll :items="filteredCountries" :item-height="220">
+        <template #default="{ item }">
+          <div class="mb-10 pa-2 d-flex justify-center">
+            <SingleCountry
+              v-model:is-loaded="isLoaded[item.name.common]"
+              :country="item"
+            />
+          </div>
+        </template>
+      </v-virtual-scroll>
+      <div
         v-if="filteredCountries?.length === 0 && !loadings.getCountries"
         class="justify-center d-flex"
-        cols="12"
       >
         <strong class="text-center mt-5 fw-bold">No results found for your search criteria.</strong>
-      </v-col>
-    </v-row>
+      </div>
+    </template>
   </v-container>
 </template>
 
@@ -122,6 +142,8 @@ interface BreadcrumbItem {
 }
 
 const DEBOUNCE_MS = 250;
+// Disable virtual scroll for now to preserve grid layout
+const VIRTUAL_SCROLL_THRESHOLD = Number.MAX_SAFE_INTEGER;
 const SUGGESTION_LIMIT = 8;
 
 const globalStore = useGlobal();
@@ -411,6 +433,8 @@ const filteredCountries = computed(() => {
 
   return result;
 });
+
+const useVirtualScroll = computed(() => filteredCountries.value.length > VIRTUAL_SCROLL_THRESHOLD);
 
 const getCountries = async () => {
   errorMessages.value = [];

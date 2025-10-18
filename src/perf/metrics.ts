@@ -1,5 +1,5 @@
 /* Lightweight Web Vitals-style performance monitoring without external deps. */
-export type MetricName = 'LCP' | 'CLS' | 'FID' | 'TTFB';
+export type MetricName = 'LCP' | 'CLS' | 'FID' | 'TTFB' | 'FCP';
 export type MetricRating = 'good' | 'needs-improvement' | 'poor';
 
 export interface Metric {
@@ -11,13 +11,15 @@ export interface Metric {
 
 export interface PerfOptions {
   reporter?: (metric: Metric) => void;
+  reporterUrl?: string; // optional endpoint for sendBeacon
 }
 
 const thresholds: Record<MetricName, [number, number]> = {
   LCP: [2500, 4000],
   FID: [100, 300],
   CLS: [0.1, 0.25],
-  TTFB: [800, 1800]
+  TTFB: [800, 1800],
+  FCP: [1800, 3000]
 };
 
 const rate = (name: MetricName, value: number): MetricRating => {
@@ -37,6 +39,14 @@ export function initPerformanceMonitoring(opts: PerfOptions = {}): () => void {
 
     console.info(`[perf] ${m.name}: ${Math.round(m.value * 100) / 100}${m.name === 'CLS' ? '' : ' ms'} (${m.rating})`);
   });
+  const send = (m: Metric) => {
+    try {
+      if (opts.reporterUrl && typeof navigator !== 'undefined' && 'sendBeacon' in navigator) {
+        const blob = new Blob([JSON.stringify(m)], { type: 'application/json' });
+        (navigator as any).sendBeacon(opts.reporterUrl, blob);
+      }
+    } catch {}
+  };
 
   const disconnectors: (() => void)[] = [];
 
@@ -45,7 +55,20 @@ export function initPerformanceMonitoring(opts: PerfOptions = {}): () => void {
     const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
     if (nav) {
       const value = nav.responseStart;
-      reporter({ name: 'TTFB', value, rating: rate('TTFB', value) });
+      const metric = { name: 'TTFB', value, rating: rate('TTFB', value) } as Metric;
+      reporter(metric);
+      send(metric);
+    }
+  } catch {}
+
+  // FCP
+  try {
+    const paints = performance.getEntriesByType('paint') as any[];
+    const fcp = paints.find(p => p.name === 'first-contentful-paint')?.startTime ?? 0;
+    if (fcp) {
+      const metric = { name: 'FCP', value: fcp, rating: rate('LCP', fcp) } as Metric; // reuse LCP thresholds
+      reporter(metric);
+      send(metric);
     }
   } catch {}
 
@@ -61,7 +84,9 @@ export function initPerformanceMonitoring(opts: PerfOptions = {}): () => void {
     });
     po.observe({ type: 'largest-contentful-paint', buffered: true as any } as unknown as PerformanceObserverInit);
     const finalize = () => {
-      reporter({ name: 'LCP', value: lcp, rating: rate('LCP', lcp) });
+      const metric = { name: 'LCP', value: lcp, rating: rate('LCP', lcp) } as Metric;
+      reporter(metric);
+      send(metric);
       po.disconnect();
     };
     addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && finalize(), { once: true });
@@ -81,7 +106,9 @@ export function initPerformanceMonitoring(opts: PerfOptions = {}): () => void {
     });
     po.observe({ type: 'layout-shift', buffered: true as any } as unknown as PerformanceObserverInit);
     const finalize = () => {
-      reporter({ name: 'CLS', value: cls, rating: rate('CLS', cls) });
+      const metric = { name: 'CLS', value: cls, rating: rate('CLS', cls) } as Metric;
+      reporter(metric);
+      send(metric);
       po.disconnect();
     };
     addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && finalize(), { once: true });
@@ -94,7 +121,9 @@ export function initPerformanceMonitoring(opts: PerfOptions = {}): () => void {
     const po = new PerformanceObserver(list => {
       for (const entry of list.getEntries() as any[]) {
         const value = entry.processingStart - entry.startTime;
-        reporter({ name: 'FID', value, rating: rate('FID', value) });
+        const metric = { name: 'FID', value, rating: rate('FID', value) } as Metric;
+        reporter(metric);
+        send(metric);
       }
     });
     po.observe({ type: 'first-input', buffered: true as any } as unknown as PerformanceObserverInit);
@@ -103,4 +132,3 @@ export function initPerformanceMonitoring(opts: PerfOptions = {}): () => void {
 
   return () => disconnectors.forEach(fn => fn());
 }
-
