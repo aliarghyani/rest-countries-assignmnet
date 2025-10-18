@@ -176,6 +176,9 @@ export default defineConfig(({ command, mode }): UserConfig => {
       // Minify option
       // https://vitejs.dev/config/build-options.html#build-minify
       minify: 'esbuild',
+      // Source maps disabled by default for smaller bundles
+      sourcemap: false,
+      modulePreload: { polyfill: false },
       // Avoid computing brotli sizes to speed up CI builds
       reportCompressedSize: false,
       // Raise the warning limit a bit due to Vuetify chunk sizes
@@ -218,6 +221,7 @@ export default defineConfig(({ command, mode }): UserConfig => {
       // Drop console when production build.
       drop: command === 'serve' ? [] : ['console', 'debugger'],
     },
+    // Pre-bundle common deps to speed up dev HMR
   };
 
   // Write meta data.

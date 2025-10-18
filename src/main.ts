@@ -1,6 +1,7 @@
 // Performance monitoring (opt-in via VITE_ENABLE_PERF_METRICS)
 import { initPerformanceMonitoring } from '@/perf/metrics';
 import { registerPWA } from '@/pwa';
+import { initErrorTracking, initAnalytics } from '@/monitoring';
 // Devtools are loaded only in development to avoid impacting prod bundle
 if (import.meta.env.DEV) {
   // Attach handy debug helpers under window.__debug
@@ -16,6 +17,8 @@ if (import.meta.env.VITE_ENABLE_PERF_METRICS === 'true') {
 
 if (import.meta.env.PROD) {
   registerPWA();
+  initErrorTracking();
+  initAnalytics();
 }
 
 // Load vue core

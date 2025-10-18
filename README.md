@@ -109,6 +109,23 @@ Create a `.env` or `.env.production` as needed:
 - Debug helpers: `window.__debug` exposes `{ app, router, global, cache, offline, alert }` for quick inspection. Code: `src/devtools/debug.ts`.
 - VS Code settings: see `.vscode/settings.json` for ESLint/Stylelint/Prettier on save and Volar takeover.
 
+## Production Monitoring
+
+- Error tracking: set `VITE_ERROR_ENDPOINT` to a POST endpoint to receive JSON error payloads (window error/unhandledrejection with message/stack/url/ua/release). Implemented in `src/monitoring.ts` using sendBeacon when available.
+- Analytics: set `VITE_GA_ID` to a Google Analytics 4 Measurement ID. A lightweight `gtag` injector is used and page views are tracked on router navigation.
+- Performance metrics: set `VITE_ENABLE_PERF_METRICS=true` to log core web vitals (see `src/perf/metrics.ts`). You can also set a `reporterUrl` via custom initialization if you integrate the overlay.
+
+## Deployment Automation
+
+- GitHub Pages (App): `.github/workflows/deploy-app.yml` builds the app and deploys `dist/` on pushes to `main`.
+- GitHub Pages (Storybook): `.github/workflows/storybook.yml` deploys Storybook.
+
+## Important Env Vars
+
+- `VITE_ENABLE_PERF_METRICS` (true/false) – enable runtime metrics logging
+- `VITE_ERROR_ENDPOINT` – error tracking collector endpoint (optional)
+- `VITE_GA_ID` – Google Analytics 4 measurement ID (optional)
+
 ## Storybook
 
 - Start: `pnpm storybook`
