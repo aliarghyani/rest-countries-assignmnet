@@ -1,6 +1,8 @@
 <template>
   <v-container class="py-2 px-0 px-md-4">
-    <v-breadcrumbs :items="breadcrumbs" divider="mdi-chevron-right" />
+    <nav aria-label="Breadcrumb">
+      <v-breadcrumbs :items="breadcrumbs" divider="mdi-chevron-right" />
+    </nav>
   </v-container>
   <v-container class="my-lg-5 my-md-3 my-2">
     <v-row justify="center">
@@ -9,12 +11,13 @@
           size="small"
           prepend-icon="mdi-arrow-left"
           text="back"
+          aria-label="Back to results"
           @click="$router.push({ path: '/' })"
         ></v-btn>
       </v-col>
     </v-row>
   </v-container>
-  <v-container>
+  <v-container aria-labelledby="details-heading">
     <v-row>
       <v-col cols="12" md="6">
         <v-skeleton-loader
@@ -44,7 +47,9 @@
         ></v-skeleton-loader>
         <v-lazy v-else class="w-100" :min-height="170" :options="{ threshold: 0.7 }" transition="fab-transition">
           <v-card color="transparent" flat max-width="570" class="detailsCard align-content-center">
-            <v-card-title>{{ country?.name.common }}</v-card-title>
+            <v-card-title>
+              <h1 id="details-heading" ref="detailsHeading" tabindex="-1">{{ country?.name.common }}</h1>
+            </v-card-title>
             <v-card-text>
               <v-row no-gutters>
                 <v-col cols="12" md="6" class="d-flex flex-column">
@@ -121,7 +126,7 @@
 
 <script setup lang="ts">
 import { useGlobal } from '@/store';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch, nextTick } from 'vue';
 import { useRoute, type RouteLocationRaw } from 'vue-router';
 
 import type { Country } from '@/interfaces/country';
@@ -141,6 +146,7 @@ const loadings = reactive<{ fetchCountryDetails: boolean; fetchBorderCountries: 
 });
 
 const country = ref<Country | null>(null);
+const detailsHeading = ref<HTMLElement | null>(null);
 const borderCountries = ref<Record<string, string>>({});
 const borderError = ref<string | null>(null);
 const activeRequestId = ref(0);
@@ -368,6 +374,8 @@ const fetchCountryDetails = async (rawName?: unknown) => {
     }
 
     await loadBorderCountries(country.value.borders ?? [], requestId);
+    await nextTick();
+    detailsHeading.value?.focus?.();
   } catch (error) {
     if (requestId !== activeRequestId.value) {
       return;

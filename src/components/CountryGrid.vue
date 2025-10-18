@@ -2,7 +2,7 @@
   <v-container class="py-2 px-0 px-md-4">
     <v-breadcrumbs :items="breadcrumbs" divider="mdi-chevron-right" />
   </v-container>
-  <v-container class="fill-height">
+  <v-container class="fill-height" role="search" aria-label="Country search and filters">
     <v-row no-gutters class="d-flex flex-row align-items-center justify-space-between">
       <v-col cols="12" sm="4" md="4">
         <v-text-field
@@ -60,9 +60,9 @@
     </v-row>
   </v-container>
 
-  <v-container class="fill-height">
+  <v-container class="fill-height" aria-label="Countries list">
     <template v-if="!useVirtualScroll">
-      <v-row no-gutters>
+      <v-row no-gutters role="list" :aria-busy="loadings.getCountries ? 'true' : 'false'">
         <v-col
           v-for="country in filteredCountries"
           :key="country.name.common"
@@ -72,6 +72,7 @@
           sm="6"
           xl="2"
           class="mb-10 pa-2"
+          role="listitem"
         >
           <v-lazy :min-height="170" :options="{ threshold: 0.7 }" transition="fab-transition">
             <SingleCountry
@@ -86,14 +87,16 @@
           class="justify-center d-flex"
           cols="12"
         >
-          <strong class="text-center mt-5 fw-bold">No results found for your search criteria.</strong>
+          <strong class="text-center mt-5 fw-bold" role="status" aria-live="polite">
+            No results found for your search criteria.
+          </strong>
         </v-col>
       </v-row>
     </template>
     <template v-else>
-      <v-virtual-scroll :items="filteredCountries" :item-height="220">
+      <v-virtual-scroll :items="filteredCountries" :item-height="220" role="list">
         <template #default="{ item }">
-          <div class="mb-10 pa-2 d-flex justify-center">
+          <div class="mb-10 pa-2 d-flex justify-center" role="listitem">
             <SingleCountry
               v-model:is-loaded="isLoaded[item.name.common]"
               :country="item"
@@ -104,6 +107,8 @@
       <div
         v-if="filteredCountries?.length === 0 && !loadings.getCountries"
         class="justify-center d-flex"
+        role="status"
+        aria-live="polite"
       >
         <strong class="text-center mt-5 fw-bold">No results found for your search criteria.</strong>
       </div>
@@ -550,4 +555,18 @@ onBeforeUnmount(() => {
   }
 });
 </script>
+
+<style scoped>
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+</style>
 
