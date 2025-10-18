@@ -101,6 +101,7 @@ Create a `.env` or `.env.production` as needed:
 
 - Unit tests via Vitest and Vue Test Utils (`pnpm test`).
 - Storybook interaction tests and accessibility checks (`pnpm storybook:test`).
+- E2E tests via Playwright (`pnpm e2e`), cross-browser (Chromium/Firefox/WebKit). Run `pnpm e2e:install` once to install browsers. Open UI with `pnpm e2e:ui` and report with `pnpm e2e:report`.
 
 ## Storybook
 

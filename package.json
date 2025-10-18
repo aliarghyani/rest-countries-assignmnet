@@ -44,6 +44,10 @@
     "storybook:ci": "storybook dev -p 6006 --quiet",
     "loki:test": "loki test --reactUri=http://localhost:6006",
     "loki:approve": "loki approve",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:report": "playwright show-report",
+    "e2e:install": "playwright install --with-deps",
     "check": "run-p -l type-check lint test",
     "preview:dist": "vite preview --strictPort --port 4173",
     "format": "prettier . -w -u"
@@ -62,7 +66,9 @@
     "webfontloader": "^1.6.28"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@eslint/js": "^9.13.0",
+    "@playwright/test": "^1.56.1",
     "@rushstack/eslint-patch": "^1.10.4",
     "@storybook/addon-a11y": "^8.6.14",
     "@storybook/addon-essentials": "^8.6.14",
