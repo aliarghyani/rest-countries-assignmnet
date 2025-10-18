@@ -103,6 +103,12 @@ Create a `.env` or `.env.production` as needed:
 - Storybook interaction tests and accessibility checks (`pnpm storybook:test`).
 - E2E tests via Playwright (`pnpm e2e`), cross-browser (Chromium/Firefox/WebKit). Run `pnpm e2e:install` once to install browsers. Open UI with `pnpm e2e:ui` and report with `pnpm e2e:report`.
 
+## Developer Tools
+
+- Dev perf overlay: set `VITE_DEV_PERF_OVERLAY=true` (dev only). An overlay shows FPS and core metrics (TTFB, FCP, LCP, CLS, FID). Code: `src/devtools/performance.ts`.
+- Debug helpers: `window.__debug` exposes `{ app, router, global, cache, offline, alert }` for quick inspection. Code: `src/devtools/debug.ts`.
+- VS Code settings: see `.vscode/settings.json` for ESLint/Stylelint/Prettier on save and Volar takeover.
+
 ## Storybook
 
 - Start: `pnpm storybook`

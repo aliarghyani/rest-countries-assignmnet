@@ -154,6 +154,9 @@ export default defineConfig(({ command, mode }): UserConfig => {
         // Allow serving files from one level up to the project root
         allow: ['..'],
       },
+      hmr: {
+        overlay: true
+      }
     },
     // Resolver
     resolve: {
@@ -207,6 +210,9 @@ export default defineConfig(({ command, mode }): UserConfig => {
           // no output.plugins (visualizer is set in rollupOptions.plugins)
         },
       },
+    },
+    optimizeDeps: {
+      include: ['vue', 'vue-router', 'pinia', 'axios', 'fuse.js', 'vuetify']
     },
     esbuild: {
       // Drop console when production build.

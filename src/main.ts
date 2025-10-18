@@ -1,7 +1,14 @@
-
 // Performance monitoring (opt-in via VITE_ENABLE_PERF_METRICS)
 import { initPerformanceMonitoring } from '@/perf/metrics';
 import { registerPWA } from '@/pwa';
+// Devtools are loaded only in development to avoid impacting prod bundle
+if (import.meta.env.DEV) {
+  // Attach handy debug helpers under window.__debug
+  import('@/devtools/debug').then(m => m.installDebugTools?.());
+  if (import.meta.env.VITE_DEV_PERF_OVERLAY === 'true') {
+    import('@/devtools/performance').then(m => m.mountPerfOverlay?.());
+  }
+}
 
 if (import.meta.env.VITE_ENABLE_PERF_METRICS === 'true') {
   initPerformanceMonitoring();
