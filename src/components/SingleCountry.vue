@@ -1,5 +1,15 @@
 <template>
-  <v-card class="mx-auto pb-5" max-width="300" elevation="6" @click="goToCountry(country)">
+  <v-card
+    class="mx-auto pb-5"
+    max-width="300"
+    elevation="6"
+    role="link"
+    tabindex="0"
+    :aria-label="`View details for ${country.name.common}`"
+    @click="goToCountry(country)"
+    @keydown.enter.prevent="goToCountry(country)"
+    @keydown.space.prevent="goToCountry(country)"
+  >
     <v-skeleton-loader
       v-if="!isLoaded"
       type="image"
@@ -13,6 +23,7 @@
       class="align-end text-white img-fluid flagImg border-b-thin"
       :height="isLoaded ? 170 : 0"
       :src="country.flags.png"
+      :alt="country.flags.alt ?? `${country.name.common} flag`"
       cover
       @load="isLoaded = true"
     ></v-img>
@@ -39,6 +50,7 @@
 <script setup lang="ts">
 import { defineProps } from 'vue';
 import { useRouter } from 'vue-router';
+
 import type { Country } from '@/interfaces/country';
 
 const router = useRouter();

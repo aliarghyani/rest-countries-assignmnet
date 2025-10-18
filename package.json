@@ -40,7 +40,10 @@
     "test:unit": "vitest",
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build",
-    "storybook:test": "storybook test --watch"
+    "storybook:test": "storybook test --watch",
+    "check": "run-p -l type-check lint test",
+    "preview:dist": "vite preview --strictPort --port 4173",
+    "format": "prettier . -w -u"
   },
   "dependencies": {
     "@kyvg/vue3-notification": "^3.4.1",

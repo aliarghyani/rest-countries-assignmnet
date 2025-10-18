@@ -1,4 +1,11 @@
 
+// Performance monitoring (opt-in via VITE_ENABLE_PERF_METRICS)
+import { initPerformanceMonitoring } from '@/perf/metrics';
+
+if (import.meta.env.VITE_ENABLE_PERF_METRICS === 'true') {
+  initPerformanceMonitoring();
+}
+
 // Load vue core
 import store from '@/store';
 import { createApp } from 'vue';

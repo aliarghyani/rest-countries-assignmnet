@@ -67,6 +67,7 @@ onMounted(() => {
 </script>
 
 <template>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <v-app :theme="isDark">
       <v-app-bar class="px-lg-5 px-md-4 px-3">
         <v-app-bar-title class="app-title" tag="h1">{{ title }}</v-app-bar-title>
@@ -80,7 +81,7 @@ onMounted(() => {
           color="blue-accent-3"
         />
       </v-app-bar>
-    <v-main>
+    <v-main id="main-content">
       <router-view v-slot="{ Component, route }">
         <!--transition :name="route.meta.transition as string || 'fade'"-->
         <component :is="Component" :key="route.path" />
@@ -92,7 +93,13 @@ onMounted(() => {
       <v-progress-circular indeterminate size="64" />
     </v-overlay>
 
-    <v-snackbar color="red" v-model="snackbarVisibility" @update:model-value="onSnackbarChanged">
+    <v-snackbar
+      color="red"
+      v-model="snackbarVisibility"
+      role="status"
+      aria-live="polite"
+      @update:model-value="onSnackbarChanged"
+    >
       {{ snackbarText }}
       <template #actions>
         <v-btn icon="mdi-close" @click="onSnackbarChanged" />
@@ -125,6 +132,20 @@ $grey-base: #9e9e9e;
   font-size: 15px;
   height: 100%;
   background-color: #fff;
+}
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #000;
+  color: #fff;
+  padding: 8px 12px;
+  z-index: 1000;
+}
+
+.skip-link:focus {
+  top: 0;
 }
 
 html {

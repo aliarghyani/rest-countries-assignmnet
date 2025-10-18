@@ -150,6 +150,10 @@ export default defineConfig(({ command, mode }): UserConfig => {
       // Minify option
       // https://vitejs.dev/config/build-options.html#build-minify
       minify: 'esbuild',
+      // Avoid computing brotli sizes to speed up CI builds
+      reportCompressedSize: false,
+      // Raise the warning limit a bit due to Vuetify chunk sizes
+      chunkSizeWarningLimit: 1200,
       // Rollup Options
       // https://vitejs.dev/config/build-options.html#build-rollupoptions
       rollupOptions: {

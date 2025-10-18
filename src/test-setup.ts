@@ -12,11 +12,19 @@ if (typeof window !== 'undefined') {
     window.ResizeObserver = ResizeObserver;
   }
   if (!window.matchMedia) {
-    window.matchMedia = () => ({
-      matches: false,
-      addListener: () => {},
-      removeListener: () => {}
-    }) as MediaQueryList;
+    window.matchMedia = ((query: string) => {
+      const mql = {
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false
+      } as unknown as MediaQueryList;
+      return mql;
+    }) as unknown as typeof window.matchMedia;
   }
 }
 
