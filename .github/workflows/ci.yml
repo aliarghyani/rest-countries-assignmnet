@@ -1,8 +1,7 @@
 name: CI
 
 on:
-  pull_request:
-    branches: ["**"]
+  # Only run CI on direct pushes to main (Vercel handles deploys on main)
   push:
     branches: ["main"]
 
