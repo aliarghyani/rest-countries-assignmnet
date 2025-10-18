@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oblador/loki/master/loki-config.schema.json",
+  "configurations": {
+    "chrome.desktop": {
+      "target": "chrome.app",
+      "width": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1
+    },
+    "chrome.mobile": {
+      "target": "chrome.app",
+      "width": 375,
+      "height": 667,
+      "deviceScaleFactor": 2
+    }
+  },
+  "storiesFilter": "**/*.stories.@(js|jsx|ts|tsx)",
+  "diffingEngine": "pixelmatch",
+  "chromeSelector": "#storybook-root"
+}
+

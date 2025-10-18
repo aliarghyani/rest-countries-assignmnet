@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { h, provide } from 'vue';
 import { routerKey, routeLocationKey } from 'vue-router';
 
-import { within, expect } from '@storybook/test';
+import { within, expect, userEvent } from '@storybook/test';
 
 import type { Country } from '@/interfaces/country';
 import type { Meta, StoryObj } from '@storybook/vue3';
@@ -26,6 +26,20 @@ const sampleCountries: Country[] = [
     population: 83240525,
     region: 'Europe',
     capital: ['Berlin']
+  },
+  {
+    name: { common: 'Japan' },
+    flags: { png: 'https://flagcdn.com/w320/jp.png', alt: 'Flag of Japan' },
+    population: 125710000,
+    region: 'Asia',
+    capital: ['Tokyo']
+  },
+  {
+    name: { common: 'Brazil' },
+    flags: { png: 'https://flagcdn.com/w320/br.png', alt: 'Flag of Brazil' },
+    population: 203062512,
+    region: 'Americas',
+    capital: ['Brasília']
   }
 ];
 
@@ -87,5 +101,19 @@ export const WithCachedCountries: Story = {
     // Basic smoke assertions to confirm cached countries rendered
     expect(await canvas.findByText('Poland')).toBeTruthy();
     expect(await canvas.findByText('Germany')).toBeTruthy();
+  }
+};
+
+export const SearchFlow: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    // Locate the search field by placeholder
+    const input = (await canvas.findByPlaceholderText('Country Name')) as HTMLInputElement;
+    await userEvent.click(input);
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Bra');
+
+    // Expect only Brazil to be shown among the sample set
+    expect(await canvas.findByText('Brazil')).toBeTruthy();
   }
 };

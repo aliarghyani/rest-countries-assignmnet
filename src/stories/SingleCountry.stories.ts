@@ -29,6 +29,16 @@ const meta: Meta<typeof SingleCountry> = {
       }
     }
   },
+  argTypes: {
+    country: {
+      description: 'Country model used to populate the card',
+      control: 'object'
+    },
+    modelValue: {
+      description: 'Loaded state for the flag image (v-model)',
+      control: 'boolean'
+    }
+  },
   // Provide a minimal router so useRouter() works inside the component
   render: args => ({
     components: { SingleCountry },
@@ -77,6 +87,24 @@ export const Loaded: Story = {
       expect(calls && calls.length).toBeGreaterThan(0);
       const [first] = (calls ?? []) as any[];
       expect(first?.[0]).toEqual({ name: 'CountryDetails', params: { name: 'Poland' } });
+    });
+  }
+};
+
+export const KeyboardNav: Story = {
+  args: {
+    country: sampleCountry,
+    modelValue: true
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const linkCard = await canvas.findByRole('link', { name: 'View details for Poland' });
+    // focus the link and trigger keyboard navigation
+    linkCard.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => {
+      const calls = (globalThis as any).__sbRouterPushCalls as any[] | undefined;
+      expect(calls && calls.length).toBeGreaterThan(0);
     });
   }
 };

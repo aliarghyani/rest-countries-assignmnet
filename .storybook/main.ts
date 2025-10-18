@@ -1,5 +1,7 @@
 import path from 'node:path';
 
+import VueComponentMeta from 'vite-plugin-vue-component-meta';
+
 import type { StorybookConfig } from '@storybook/vue3-vite';
 
 const config: StorybookConfig = {
@@ -11,7 +13,10 @@ const config: StorybookConfig = {
   ],
   framework: {
     name: '@storybook/vue3-vite',
-    options: {}
+    options: {
+      // Prefer vue-component-meta for robust TS prop/emit extraction
+      docgen: 'vue-component-meta'
+    }
   },
   docs: {
     autodocs: 'tag'
@@ -24,6 +29,10 @@ const config: StorybookConfig = {
     aliasArray.push({ find: '@', replacement: path.resolve(__dirname, '../src') });
     aliasArray.push({ find: '~', replacement: path.resolve(__dirname, '../node_modules') });
     (config.resolve as any).alias = aliasArray;
+
+    // Enable vue-component-meta for TypeScript-aware docs
+    config.plugins = config.plugins ?? [];
+    config.plugins.push(VueComponentMeta());
     return config;
   }
 };
