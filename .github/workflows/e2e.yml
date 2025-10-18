@@ -1,8 +1,8 @@
 name: E2E
 
 on:
-  # Run E2E only for PRs targeting main (and manual runs)
-  pull_request:
+  # Run E2E only after merge/push to main (and manual runs)
+  push:
     branches: ["main"]
   workflow_dispatch: {}
 
