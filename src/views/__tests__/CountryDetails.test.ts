@@ -1,4 +1,5 @@
 /// <reference types="vitest" />
+import { useGlobal } from '@/store';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -36,9 +37,9 @@ vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>' }
 }));
 
+import { DEFAULT_CACHE_TTL_MS, BORDER_COUNTRIES_CACHE_TTL_MS } from '@/apiService';
+import { CACHE_NAMESPACE, createCacheKey } from '@/store/GlobalStore';
 import CountryDetails from '@/views/CountryDetails.vue';
-
-import { useGlobal } from '@/store';
 
 const stubs = {
   'v-container': { template: '<div class="v-container"><slot /></div>' },
@@ -47,12 +48,24 @@ const stubs = {
   'v-breadcrumbs': { template: '<nav><slot /></nav>' },
   'v-btn': {
     emits: ['click'],
-    template: '<button data-test="border-btn" type="button" @click="$emit(\'click\')"><slot /></button>'
+    template: '<button type="button" v-bind="$attrs" @click="$emit(\'click\')"><slot /></button>'
   },
+  'v-responsive': { template: '<div class="v-responsive"><slot /></div>' },
+  'v-sheet': { template: '<div class="v-sheet"><slot /></div>' },
+  'v-icon': { props: ['icon'], template: '<span class="v-icon" :data-icon="icon"></span>' },
   'v-skeleton-loader': { template: '<div class="skeleton"><slot /></div>' },
   'v-lazy': { template: '<div><slot /></div>' },
-  'v-img': { props: ['src'], template: '<img :src="src" />' },
-  'v-card': { template: '<div class="v-card"><slot /></div>' },
+  'v-img': {
+    props: ['src'],
+    emits: ['error'],
+    template:
+      '<img :src="src" @error="$emit(\'error\')" />'
+  },
+  'v-chip': {
+    emits: ['click'],
+    template: '<button type="button" v-bind="$attrs" @click="$emit(\'click\')"><slot /></button>'
+  },
+  'v-card': { template: '<div class="v-card" v-bind="$attrs"><slot /></div>' },
   'v-card-title': { template: '<h2><slot /></h2>' },
   'v-card-text': { template: '<div class="v-card-text"><slot /></div>' },
   'v-progress-circular': { template: '<div class="progress" />' }
@@ -121,9 +134,10 @@ describe('CountryDetails', () => {
     expect(apiMocks.getCountryByName).toHaveBeenCalledWith('poland');
     expect(apiMocks.getBorderCountriesByCodes).toHaveBeenCalledWith(['deu']);
     expect(wrapper.text()).toContain('Poland');
-    expect(wrapper.findAll('[data-test="border-btn"]').length).toBeGreaterThan(0);
+    expect(wrapper.findAll('[data-test="quick-fact-card"]').length).toBeGreaterThan(0);
+    expect(wrapper.findAll('[data-test="border-chip"]').length).toBeGreaterThan(0);
 
-    await wrapper.find('[data-test="border-btn"]').trigger('click');
+    await wrapper.find('[data-test="border-chip"]').trigger('click');
     expect(routerPush).toHaveBeenCalled();
   });
 
@@ -135,5 +149,92 @@ describe('CountryDetails', () => {
     await flushPromises();
     // Displays underlying error message
     expect(wrapper.text()).toContain('Boom');
+  });
+
+  it('shows empty border message when a country has no borders', async () => {
+    apiMocks.getCountryByName.mockResolvedValueOnce({
+      data: [{ ...baseCountry, borders: [] }]
+    });
+
+    const wrapper = mount(CountryDetails, {
+      global: {
+        plugins: [pinia],
+        stubs,
+        mocks: { $router: { push: routerPush } }
+      }
+    });
+
+    await flushPromises();
+
+    expect(apiMocks.getBorderCountriesByCodes).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('No border countries');
+  });
+
+  it('renders offline cached border notice when cache is available', async () => {
+    const store = useGlobal();
+
+    const cachedCountry = { ...baseCountry };
+    const lowerName = cachedCountry.name.common.toLowerCase();
+    const countryCacheKey = createCacheKey(CACHE_NAMESPACE.COUNTRY_BY_NAME, lowerName);
+    store.setCachedResponse(countryCacheKey, [cachedCountry], DEFAULT_CACHE_TTL_MS);
+
+    const normalizedCode = (cachedCountry.borders?.[0] ?? '').toLowerCase();
+    const aggregateKey = createCacheKey(CACHE_NAMESPACE.BORDER_COUNTRIES, normalizedCode);
+    if (normalizedCode) {
+      store.setCachedResponse(
+        aggregateKey,
+        { [normalizedCode]: borderCountry },
+        BORDER_COUNTRIES_CACHE_TTL_MS
+      );
+    }
+
+    store.setOffline(true);
+    apiMocks.getCountryByName.mockReset();
+    apiMocks.getBorderCountriesByCodes.mockReset();
+
+    const wrapper = mount(CountryDetails, {
+      global: {
+        plugins: [pinia],
+        stubs,
+        mocks: { $router: { push: routerPush } }
+      }
+    });
+
+    await flushPromises();
+
+    expect(apiMocks.getCountryByName).not.toHaveBeenCalled();
+    expect(apiMocks.getBorderCountriesByCodes).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('Offline: Showing cached border data');
+    store.setOffline(false);
+  });
+
+  it('shows a placeholder when flag assets fail to load with no fallback', async () => {
+    apiMocks.getCountryByName.mockResolvedValueOnce({
+      data: [
+        {
+          ...baseCountry,
+          flags: { png: 'broken.png', alt: 'Broken flag' },
+          coatOfArms: undefined
+        }
+      ]
+    });
+
+    const wrapper = mount(CountryDetails, {
+      global: {
+        plugins: [pinia],
+        stubs,
+        mocks: { $router: { push: routerPush } }
+      }
+    });
+
+    await flushPromises();
+
+    const flagImg = wrapper.find('img');
+    expect(flagImg.exists()).toBe(true);
+
+    await flagImg.trigger('error');
+    await flushPromises();
+
+    expect(wrapper.find('[data-test="flag-placeholder"]').exists()).toBe(true);
   });
 });

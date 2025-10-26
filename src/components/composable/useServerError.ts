@@ -1,12 +1,14 @@
-import { isAxiosError, type AxiosError } from 'axios';
+
+import store, { useGlobal } from '@/store';
 import type { Pinia } from 'pinia';
 import type { Router } from 'vue-router';
 
-import router from '@/router';
-import store, { useGlobal } from '@/store';
+import { isAxiosError, type AxiosError } from 'axios';
 
 import handleCorsError from './handleCorsError';
 import sendAlert, { type AlertType } from './useSendAlert';
+
+import router from '@/router';
 
 const AUTH_ROUTE_NAME = 'Auth';
 const SERVER_ERROR_TITLE = 'Server Error';

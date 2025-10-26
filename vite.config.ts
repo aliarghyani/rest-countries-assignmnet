@@ -4,10 +4,11 @@ import { fileURLToPath, URL } from 'node:url';
 
 import vue from '@vitejs/plugin-vue';
 import { defineConfig, type Plugin, type UserConfig } from 'vite';
-import { VitePWA } from 'vite-plugin-pwa';
+
 
 import { visualizer } from 'rollup-plugin-visualizer';
 import { checker } from 'vite-plugin-checker';
+import { VitePWA } from 'vite-plugin-pwa';
 import vueDevTools from 'vite-plugin-vue-devtools';
 import vuetify, { transformAssetUrls } from 'vite-plugin-vuetify';
 

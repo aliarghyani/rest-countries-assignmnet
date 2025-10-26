@@ -1,6 +1,7 @@
+import sendAlert from './useSendAlert';
+
 import type { AxiosError } from 'axios';
 
-import sendAlert from './useSendAlert';
 
 const NETWORK_ERROR_TITLE = 'Network Error';
 const NETWORK_ERROR_MESSAGE =
@@ -16,7 +17,7 @@ type CorsLikeError = AxiosError | Error | unknown;
 export default function handleCorsError(error: CorsLikeError): void {
   // Keep a console trace to aid debugging in development environments.
   if (import.meta.env.DEV) {
-    // eslint-disable-next-line no-console
+     
     console.error(NETWORK_ERROR_TITLE, error);
   }
 

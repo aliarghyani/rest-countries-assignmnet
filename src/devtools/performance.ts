@@ -1,7 +1,7 @@
 /* Development-only performance helpers. Safe to import conditionally. */
 import { initPerformanceMonitoring } from '@/perf/metrics';
 
-type OverlayEntry = { label: string; value: string };
+interface OverlayEntry { label: string; value: string }
 
 let overlayEl: HTMLDivElement | null = null;
 let rafId = 0;

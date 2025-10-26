@@ -1,8 +1,9 @@
 /// <reference types="vitest" />
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createPinia, setActivePinia } from 'pinia';
-
 import { useGlobal } from '@/store';
+import { createPinia, setActivePinia } from 'pinia';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+
 import { CACHE_NAMESPACE, createCacheKey } from '@/store/GlobalStore';
 
 const { mockGet, axiosInstance } = vi.hoisted(() => {

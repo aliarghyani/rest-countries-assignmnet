@@ -1,11 +1,13 @@
+import { useGlobal } from '@/store';
+
 import axios, {
   type AxiosError,
   type AxiosRequestConfig,
   type AxiosResponse
 } from 'axios';
 
-import { useGlobal } from '@/store';
 import type { Country } from '@/interfaces/country';
+
 import { CACHE_NAMESPACE, createCacheKey } from '@/store/GlobalStore';
 
 interface CountryByCodeResponse {

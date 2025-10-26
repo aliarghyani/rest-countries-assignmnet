@@ -94,8 +94,8 @@ onMounted(() => {
     </v-overlay>
 
     <v-snackbar
-      color="red"
       v-model="snackbarVisibility"
+      color="red"
       role="status"
       aria-live="polite"
       @update:model-value="onSnackbarChanged"
