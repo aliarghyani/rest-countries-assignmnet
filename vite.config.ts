@@ -5,9 +5,10 @@ import { fileURLToPath, URL } from 'node:url';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig, type Plugin, type UserConfig } from 'vite';
 
+
 import { visualizer } from 'rollup-plugin-visualizer';
 import { checker } from 'vite-plugin-checker';
-import vueDevTools from 'vite-plugin-vue-devtools';
+import { VitePWA } from 'vite-plugin-pwa';
 import vuetify, { transformAssetUrls } from 'vite-plugin-vuetify';
 
 import pkg from './package.json';
@@ -108,7 +109,6 @@ export default defineConfig(({ command, mode }): UserConfig => {
           transformAssetUrls,
         },
       }),
-      vueDevTools(),
       // Vuetify Loader
       // https://github.com/vuetifyjs/vuetify-loader/tree/master/packages/vite-plugin
       vuetify({
@@ -123,14 +123,39 @@ export default defineConfig(({ command, mode }): UserConfig => {
         // eslint: { lintCommand: 'eslint' },
         // stylelint: { lintCommand: 'stylelint' },
       }),
+      // PWA: Service worker + offline cache
+      VitePWA({
+        registerType: 'autoUpdate',
+        strategies: 'injectManifest',
+        srcDir: 'src/plugins',
+        filename: 'sw.ts',
+        includeAssets: ['favicon.ico', 'robots.txt', 'icons/*.png'],
+        injectRegister: 'auto',
+        devOptions: { enabled: false },
+        manifest: {
+          name: 'REST Countries Explorer',
+          short_name: 'Countries',
+          start_url: '/',
+          display: 'standalone',
+          theme_color: '#1976D2',
+          background_color: '#ffffff',
+          icons: [
+            { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+            { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+          ]
+        }
+      }),
       spaHistoryFallbackPlugin(),
     ],
     // https://vitejs.dev/config/server-options.html
     server: {
       fs: {
-        // Allow serving files from one level up to the project root
-        allow: ['..'],
+        // Restrict serving to this project root to avoid external scanning
+        allow: ['.'],
       },
+      hmr: {
+        overlay: true
+      }
     },
     // Resolver
     resolve: {
@@ -150,9 +175,19 @@ export default defineConfig(({ command, mode }): UserConfig => {
       // Minify option
       // https://vitejs.dev/config/build-options.html#build-minify
       minify: 'esbuild',
+      // Source maps disabled by default for smaller bundles
+      sourcemap: false,
+      modulePreload: { polyfill: false },
+      // Avoid computing brotli sizes to speed up CI builds
+      reportCompressedSize: false,
+      // Raise the warning limit a bit due to Vuetify chunk sizes
+      chunkSizeWarningLimit: 1200,
       // Rollup Options
       // https://vitejs.dev/config/build-options.html#build-rollupoptions
       rollupOptions: {
+        plugins: mode === 'analyze'
+          ? [visualizer({ open: true, filename: 'dist/stats.html' })]
+          : [],
         output: {
           manualChunks: {
             // Split external library from transpiled code.
@@ -165,24 +200,20 @@ export default defineConfig(({ command, mode }): UserConfig => {
               'webfontloader',
             ],
             materialdesignicons: ['@mdi/font/css/materialdesignicons.css'],
+            vendor_utils: ['axios', 'fuse.js']
           },
-          plugins: [
-            mode === 'analyze'
-              ? // rollup-plugin-visualizer
-                // https://github.com/btd/rollup-plugin-visualizer
-                visualizer({
-                  open: true,
-                  filename: 'dist/stats.html',
-                })
-              : undefined,
-          ],
+          // no output.plugins (visualizer is set in rollupOptions.plugins)
         },
       },
     },
+    optimizeDeps: {
+      include: ['vue', 'vue-router', 'pinia', 'axios', 'fuse.js', 'vuetify']
+    },
     esbuild: {
       // Drop console when production build.
-      drop: command === 'serve' ? [] : ['console'],
+      drop: command === 'serve' ? [] : ['console', 'debugger'],
     },
+    // Pre-bundle common deps to speed up dev HMR
   };
 
   // Write meta data.

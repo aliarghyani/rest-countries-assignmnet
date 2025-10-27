@@ -6,8 +6,11 @@ export interface Country {
   };
   flags: {
     png: string;
+    svg?: string;
     alt?: string;
   };
+  cca2?: string;
+  cca3?: string;
   capital?: string[];
   region?: string;
   subregion?: string;
@@ -16,4 +19,9 @@ export interface Country {
   languages?: Record<string, string>;
   currencies?: Record<string, { name: string; symbol?: string }>;
   borders?: string[];
+  timezones?: string[];
+  coatOfArms?: {
+    png?: string;
+    svg?: string;
+  };
 }
