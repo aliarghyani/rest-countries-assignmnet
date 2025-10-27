@@ -9,7 +9,6 @@ import { defineConfig, type Plugin, type UserConfig } from 'vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { checker } from 'vite-plugin-checker';
 import { VitePWA } from 'vite-plugin-pwa';
-import vueDevTools from 'vite-plugin-vue-devtools';
 import vuetify, { transformAssetUrls } from 'vite-plugin-vuetify';
 
 import pkg from './package.json';
@@ -110,7 +109,6 @@ export default defineConfig(({ command, mode }): UserConfig => {
           transformAssetUrls,
         },
       }),
-      vueDevTools(),
       // Vuetify Loader
       // https://github.com/vuetifyjs/vuetify-loader/tree/master/packages/vite-plugin
       vuetify({
@@ -152,8 +150,8 @@ export default defineConfig(({ command, mode }): UserConfig => {
     // https://vitejs.dev/config/server-options.html
     server: {
       fs: {
-        // Allow serving files from one level up to the project root
-        allow: ['..'],
+        // Restrict serving to this project root to avoid external scanning
+        allow: ['.'],
       },
       hmr: {
         overlay: true
@@ -187,16 +185,9 @@ export default defineConfig(({ command, mode }): UserConfig => {
       // Rollup Options
       // https://vitejs.dev/config/build-options.html#build-rollupoptions
       rollupOptions: {
-        plugins: (
-          (mode === 'analyze'
-            ? [
-                visualizer({
-                  open: true,
-                  filename: 'dist/stats.html'
-                }) as unknown as any
-              ]
-            : []) as any
-        ),
+        plugins: mode === 'analyze'
+          ? [visualizer({ open: true, filename: 'dist/stats.html' })]
+          : [],
         output: {
           manualChunks: {
             // Split external library from transpiled code.

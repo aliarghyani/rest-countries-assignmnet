@@ -7,10 +7,13 @@ export function registerPWA() {
   // Use dynamic specifier so TypeScript doesn't try to type-resolve it
   const moduleId = 'virtual:pwa-register' as string;
   // @ts-ignore - vite will replace this virtual module at build time
-  import(moduleId as any)
-    .then(mod => {
-      const { registerSW } = mod as any;
-      registerSW?.({ immediate: true });
+  import(/* @vite-ignore */ moduleId)
+    .then((mod: unknown) => {
+      const registerSW =
+        (mod as { registerSW?: (options?: { immediate?: boolean }) => void }).registerSW;
+      if (typeof registerSW === 'function') {
+        registerSW({ immediate: true });
+      }
     })
     .catch(() => {
       /* ignore in dev/test */

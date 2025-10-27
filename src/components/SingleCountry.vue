@@ -49,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineProps } from 'vue';
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 
 import type { Country } from '@/interfaces/country';
